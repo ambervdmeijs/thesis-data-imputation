@@ -12,6 +12,9 @@ install.packages("DMwR")
 install.packages("mice")
 install.packages("missForest", dependencies = TRUE)
 install.packages("e1071")
+install.packages("imputeR")
+install.packages("ForImp")
+install.packages("missMDA")
 
 
 # Loading packages ----------------------------------------------------------------------------------------------------
@@ -26,67 +29,61 @@ library("DMwR")
 library("mice")
 library("missForest")
 library("e1071")
+library("imputeR")
+library("ForImp")
+library("missMDA")
 
 
 # Loading the database ------------------------------------------------------------------------------------------------
-#ipumsdeel1 <- read_excel("D:/Amber/Documenten/School/Tilburg University/Master/Thesis/IPUMS2001 deel 1.xlsx")
-
+ipumsdeel1 <- read_excel("D:/Amber/Documenten/School/Tilburg University/Master/Thesis/IPUMS2001 deel 1.xlsx")
 #ipumsdeel1 <- read_excel("//studfiles.campus.uvt.nl/files/home/home06/u1278896/Thesis/IPUMS2001 deel 1.xlsx")
 
 
-# Creating missing values ---------------------------------------------------------------------------------------------
-missing_ipums <- missing_data(ipumsdeel1, miss_prop = 0.05, type = 'random')
+# Open database -------------------------------------------------------------------------------------------------------
+View(ipumsdeel1)
 
-prop.table(table(is.na(missing_ipums))) # $column naam toevoegen, om proportie missing data van column/variabel te zien
+
+# Creating missing values (MCAR with a 5% maximum treshold) -----------------------------------------------------------
+MCAR <- SimIm(ipumsdeel1, p = 0.05)       #https://cran.r-project.org/web/packages/imputeR/imputeR.pdf 
+  
+  ## Counting NA's in dataset MCAR 
+  sum(is.na(ipumsdeel1))
+
+  prop.table(table(is.na(MCAR))) # $column naam toevoegen, om proportie missing data van column/variabel te zien
   # add clust_var = NULL if generating missing data from a single level data set
 
-## Pattern of missing data 
-md.pattern(missing_ipums)
+  ## Looking at the missing data pattern
+  md.pattern(MCAR) #Looking at the missing data pattern
 
-## Visualizing missing data pattern 
-missing_plot <- aggr(missing_ipums, col = c("navyblue", "red"), numbers = TRUE, sortVars = TRUE, 
-                     labels = names(ipumsdeel1), cex.axis = 0.7, gap = 3, 
-                     ylab = c("Histogram of missing data", "Pattern"))
+  ## Visualizing missing data pattern 
+
 
   # https://datascienceplus.com/imputing-missing-data-with-r-mice-package/ 
 
 
-# Building Mean imputation model ---------------------------------------------------------------------------------------
-apply_meanimputation <- transform(ipumsdeel1, missing_ipums = ifelse(is.na(missing_ipums), 
-                                                                     mean(missing_ipums, na.rm = TRUE), missing_ipums))
+# Mode imputation -----------------------------------------------------------------------------------------------------
+mode_imputation <- modeimp(MCAR)
 
-## Computing accuracy with errors 
-actual_data <- ipumsdeel1
-
-predicted_data <- rep(apply_meanimputation, length(actual_data))
-
-regr.eval(actual_data, predicted_data)
-
-print(regr.eval)
-
-
-## Model applied on train data 
-applytrn_meanimputation <- transform(ipumsdeel1, missing_ipums = ifelse(is.na(missing_ipums), 
-                                                                     mean(missing_ipums, na.rm=TRUE), missing_ipums))
+  ## Computing accuracy / Evaluating method  
+  regr.eval(ipumsdeel1, mode_imputation)
   
-  # Each element of y; if it is NA, we replace it with the mean, otherwise we replace it with the original value
+  #r-statistics.co/Missing-Value-Treatment-With-R.html 
 
 
+# Multiple imputation -------------------------------------------------------------------------------------------------
 
+  ## MICE
+  #multiple_imputation <- mice(missing_ipums, m = 5, maxit = 50, meth = "pmm", seed = 2)
 
-
-
-
-
-
-# Building Multiple imputation model ----------------------------------------------------------------------------------
-apply_multipleimputation <- mice(missing_ipums, m = 5, maxit = 50, meth = "pmm", seed = 2)
-
-summary(apply_multipleimputation)
-
-
-
+  #summary(apply_multipleimputation)
   # https://datascienceplus.com/imputing-missing-data-with-r-mice-package/
+
+  ## missMDA
+  #number_dimensions <- estim_ncpMCA(MCAR, ncp.max = 5)
+  
+  #multiple_imputation <- MIMCA(MCAR, ncp = 4, nboot = 10)
+  # https://www.r-bloggers.com/multiple-imputation-for-continuous-and-categorical-data/
+
 
 
 # Creating a training and a test set for 'ipumsdeel1' dataframe --------------------------------------------------------
