@@ -36,12 +36,15 @@ library("missMDA")
 
 ## Loading the database ------------------------------------------------------------------------------------------------
 ipumsdeel1 <- read_excel("D:/Amber/Documenten/School/Tilburg University/Master/Thesis/IPUMS2001 deel 1.xlsx")
-#ipumsdeel1 <- read_excel("//studfiles.campus.uvt.nl/files/home/home06/u1278896/Thesis/IPUMS2001 deel 1.xlsx")
+ipumsdeel1 <- read_excel("//studfiles.campus.uvt.nl/files/home/home06/u1278896/Thesis/IPUMS2001 deel 1.xlsx")
 
 # What is the target variable in this data set?
 
 ## Open database -------------------------------------------------------------------------------------------------------
 View(ipumsdeel1)
+
+## Erase column 'nr' ---------------------------------------------------------------------------------------------------
+
 
 
 ## Creating missing values (MCAR with a 5% maximum treshold) -----------------------------------------------------------
@@ -73,19 +76,6 @@ View(mode_imputation)
   densityplot(mode_imputation)
   
   #r-statistics.co/Missing-Value-Treatment-With-R.html 
-
-  
-## Creating train and test set -----------------------------------------------------------------------------------------
-# Do I need this? Because I have the original and new dataset to compare. 
-  
-  # Set the seed to make partition reproducible 
-  set.seed(10)
-  
-  # Divide data set into train and test set 
-  trn_indexes <- sample(nrow(MCAR), size = 0.7 * nrow(MCAR))
-  
-  train <- MCAR[trn_indexes, ]
-  test <- MCAR[-trn_indexes, ]
 
 
 ## Multiple imputation -------------------------------------------------------------------------------------------------
@@ -120,11 +110,98 @@ random_forest <- missForest(MCAR[ ,1:14], xtrue = ipumsdeel1[ ,1:14], verbose = 
   random_forest$error
 
 
+## Building Random Forest model ----------------------------------------------------------------------------------------
+randomforest <- missForest(missing_ipums)
+
+  # Calling imputed data matrix
+  randomforest$ximp
+
+  # Calling OOB imputation error estimate 
+  randomforest$OOBerror 
+
+    #NRMSE = error continuous error
+    #PFC = the proportion of falsely classified entries in the categorical part of the imputed data set 
+    #Good = close to 0, bad is close to 1
+
+  # Additional performance output: estimated errors, difference and running time with max. 10 iterations   
+  set.seed(3)
+  randomforest <- missForest(missing_ipums, verbose = TRUE, maxiter = 10)
+
+  # Comparing actual data accuracy
+  randomforest_error <- mixError(randomforest$ximp, MCAR, ipumsdeel1)
+  randomforest_error
+  
+    # https://www.analyticsvidhya.com/blog/2016/03/tutorial-powerful-packages-imputing-missing-values/
+    # https://stat.ethz.ch/education/semesters/ss2013/ams/paper/missForest_1.2.pdf
 
 
-# Do I want a hold-out set for final test? Or only train and test?
+## Building Naive Bayes model ------------------------------------------------------------------------------------------
+naivebayes <- naiveBayes(class ~ ., data = ipumsdeel1)
+class(apply_naive)
+summary(apply_naive)
+print(apply_naive)
 
-## with Cross Validation 
+predict_naive <- predict(apply_naive, newdata = MCAR)
+
+    # https://www.r-bloggers.com/naive-bayes-classification-in-r-part-2/ 
+
+
+## kNN imputation ------------------------------------------------------------------------------------------------------
+str(MCAR)
+
+knearestneighbor <- kNN(MCAR, variable = c("Geslacht", "Leeftijd", "HH_Pos", "HH_grootte", "Woonregio vorig jaar", 
+                                            "Nationaliteit", "Geboorteland", "Onderwijsniveau", "Econ. status", 
+                                           "Beroep", "SBI", "Burg. Staat", "Gewicht"), k = 10)
+knearestneighbor <- kNN(MCAR, k = 10)
+
+  # Checking if NA's are gone
+  summary(knearestneighbor)
+   
+  # Computing accuracy
+  regr.eval(ipumsdeel1, knearestneighbor)
+  
+KNN1 <-knn.impute(MCAR, k = 10) install("bnstruct")
+
+  # Computing accuracy
+  regr.eval(ipumsdeel1, KNN1)
+  
+
+## Support Vector Machine imputation -----------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Creating train and test set -----------------------------------------------------------------------------------------
+# Do I need this? Because I have the original and new dataset to compare. 
+
+# Set the seed to make partition reproducible 
+set.seed(10)
+
+# Divide data set into train and test set 
+trn_indexes <- sample(nrow(MCAR), size = 0.7 * nrow(MCAR))
+
+train <- MCAR[trn_indexes, ]
+test <- MCAR[-trn_indexes, ]
+
+# with Cross Validation 
 
 trn_ipumsdeel1_cv <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
 
@@ -140,34 +217,4 @@ trn_meanimputation <- train(x, data = ipumsdeel1, trControl = trn_ipumsdeel1_cv,
 
 ## Computing accuracy test set 
 
-
-# Building Random Forest model ----------------------------------------------------------------------------------------
-apply_randomforest <- missForest(missing_ipums)
-
-## Calling imputed data matrix
-apply_randomforest$ximp
-
-## Calling OOB imputation error estimate 
-apply_randomforest$OOBerror 
-
-    #PFC = the proportion of falsely classified entries in the categorical part of the imputed data set 
-    #Good = close to 0, bad is close to 1
-
-## Additional performance output: estimated errors, difference and running time with max. 10 iterations   
-set.seed(3)
-apply_randomforest <- missForest(missing_ipums, verbose = TRUE, maxiter = 10)
-
-    # https://www.analyticsvidhya.com/blog/2016/03/tutorial-powerful-packages-imputing-missing-values/
-    # https://stat.ethz.ch/education/semesters/ss2013/ams/paper/missForest_1.2.pdf
-
-
-# Building Naive Bayes model ------------------------------------------------------------------------------------------
-apply_naive <- naiveBayes(class ~ ., data = trn_ipumsdeel1)
-class(apply_naive)
-summary(apply_naive)
-print(apply_naive)
-
-predict_naive <- predict(apply_naive, newdata = tst_ipumsdeel1)
-
-    # https://www.r-bloggers.com/naive-bayes-classification-in-r-part-2/ 
 
