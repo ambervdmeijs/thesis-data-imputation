@@ -34,70 +34,93 @@ library("ForImp")
 library("missMDA")
 
 
-# Loading the database ------------------------------------------------------------------------------------------------
+## Loading the database ------------------------------------------------------------------------------------------------
 ipumsdeel1 <- read_excel("D:/Amber/Documenten/School/Tilburg University/Master/Thesis/IPUMS2001 deel 1.xlsx")
 #ipumsdeel1 <- read_excel("//studfiles.campus.uvt.nl/files/home/home06/u1278896/Thesis/IPUMS2001 deel 1.xlsx")
 
+# What is the target variable in this data set?
 
-# Open database -------------------------------------------------------------------------------------------------------
+## Open database -------------------------------------------------------------------------------------------------------
 View(ipumsdeel1)
 
 
-# Creating missing values (MCAR with a 5% maximum treshold) -----------------------------------------------------------
+## Creating missing values (MCAR with a 5% maximum treshold) -----------------------------------------------------------
 MCAR <- SimIm(ipumsdeel1, p = 0.05)       #https://cran.r-project.org/web/packages/imputeR/imputeR.pdf 
+View(MCAR)
   
-  ## Counting NA's in dataset MCAR 
-  sum(is.na(ipumsdeel1))
+  # Counting NA's in dataset MCAR 
+  sum(is.na(MCAR))
 
   prop.table(table(is.na(MCAR))) # $column naam toevoegen, om proportie missing data van column/variabel te zien
-  # add clust_var = NULL if generating missing data from a single level data set
 
-  ## Looking at the missing data pattern
+  # Looking at the missing data pattern
   md.pattern(MCAR) #Looking at the missing data pattern
 
-  ## Visualizing missing data pattern 
+  # Visualizing missing data pattern 
+
 
 
   # https://datascienceplus.com/imputing-missing-data-with-r-mice-package/ 
 
 
-# Mode imputation -----------------------------------------------------------------------------------------------------
+## Mode imputation -----------------------------------------------------------------------------------------------------
 mode_imputation <- modeimp(MCAR)
+View(mode_imputation)
 
-  ## Computing accuracy / Evaluating method  
+  # Computing accuracy / Evaluating method  
   regr.eval(ipumsdeel1, mode_imputation)
+  
+  densityplot(mode_imputation)
   
   #r-statistics.co/Missing-Value-Treatment-With-R.html 
 
+  
+## Creating train and test set -----------------------------------------------------------------------------------------
+# Do I need this? Because I have the original and new dataset to compare. 
+  
+  # Set the seed to make partition reproducible 
+  set.seed(10)
+  
+  # Divide data set into train and test set 
+  trn_indexes <- sample(nrow(MCAR), size = 0.7 * nrow(MCAR))
+  
+  train <- MCAR[trn_indexes, ]
+  test <- MCAR[-trn_indexes, ]
 
-# Multiple imputation -------------------------------------------------------------------------------------------------
 
-  ## MICE
-  #multiple_imputation <- mice(missing_ipums, m = 5, maxit = 50, meth = "pmm", seed = 2)
-
-  #summary(apply_multipleimputation)
+## Multiple imputation -------------------------------------------------------------------------------------------------
+multiple_imputation <- mice(MCAR, m = 5, maxit = 50, meth = "pmm", seed = 500)
+summary(multiple_imputation)
+  
+  # Get complete data (3rd out of 5)
+  multiple_imputation_output <- complete(multiple_imputation, 3)
+  anyNA(multiple_imputation_output)
+  
+  # Computing accuracy 
+  regr.eval(ipumsdeel1, multiple_imputation_output)
+  
+  # Building predictive model
+  multiple_fit <- with(MCAR, exp = lm())
+  
+  
   # https://datascienceplus.com/imputing-missing-data-with-r-mice-package/
 
-  ## missMDA
-  #number_dimensions <- estim_ncpMCA(MCAR, ncp.max = 5)
   
-  #multiple_imputation <- MIMCA(MCAR, ncp = 4, nboot = 10)
-  # https://www.r-bloggers.com/multiple-imputation-for-continuous-and-categorical-data/
+## Random forest imputation --------------------------------------------------------------------------------------------
+random_forest <- missForest(MCAR[ ,1:14], xtrue = ipumsdeel1[ ,1:14], verbose = TRUE)
+  # How do I decrease computation time?
+  
+  # Computing accuracy
+  regr.eval(ipumsdeel1, random_forest)
+  
+  # OOB Error
+  random_forest$OOBerror
+  
+  # The true error using xtrue
+  random_forest$error
 
 
 
-# Creating a training and a test set for 'ipumsdeel1' dataframe --------------------------------------------------------
-
-## 70% of the sample size 
-smp_size <- floor(0.70 * nrow(ipumsdeel1))
-
-## set the seed to make the partition reproductible 
-set.seed(1)
-
-trn_indexes <- sample.int(nrow(ipumsdeel1), size = smp_size * nrow(ipumsdeel1)) #sets maken van missing data set?
-
-trn_ipumsdeel1 <- ipumsdeel1[trn_indexes, ]
-tst_ipumsdeel1 <- ipumsdeel1[-trn_indexes, ]
 
 # Do I want a hold-out set for final test? Or only train and test?
 
