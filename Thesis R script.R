@@ -168,8 +168,16 @@ KNN1 <-knn.impute(MCAR, k = 10) install("bnstruct")
 
 ## Support Vector Machine imputation -----------------------------------------------------------------------------------
 
+  
+  
+## Decision Tree imputation --------------------------------------------------------------------------------------------
 
 
+  
+  
+  
+  
+  # https://rdrr.io/cran/simputation/man/impute_tree.html
 
 
 
