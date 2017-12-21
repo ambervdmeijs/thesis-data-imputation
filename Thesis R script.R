@@ -24,6 +24,7 @@ install.packages("ForImp")
 install.packages("missMDA")
 install_github("lebebr01/simglm", build_vignettes = TRUE) # in this section because of different install procedure
 install.packages("ggplot2")
+install.packages("rpart")
 }
 
 
@@ -42,23 +43,34 @@ library("imputeR")
 library("ForImp")
 library("missMDA")
 library("ggplot2")
+library("rpart")
 
 
-## Loading the database ------------------------------------------------------------------------------------------------
+## Loading the databases -----------------------------------------------------------------------------------------------
 #ipumsdeel1 <- read_excel("D:/Amber/Documenten/School/Tilburg University/Master/Thesis/IPUMS2001 deel 1.xlsx")
 ipumsdeel1 <- read_excel("IPUMS2001 deel 1.xlsx")
 
 
+## Combining databases by rows -----------------------------------------------------------------------------------------
+#ipums <- bind_rows(y,z)
+#ipums <- rbind(ipumsdeel1, ipumsdeel2)
+
+#slice(ipums, 90000:90001) to check if deel 2's first row comes after deel 1's last row. 
+
 ## Open database -------------------------------------------------------------------------------------------------------
-View(ipumsdeel1)
+View(ipums)
 
 
 ## Erase column 'nr' ---------------------------------------------------------------------------------------------------
-ipumsdeel1 <- ipumsdeel1[-1]
+ipums <- ipums[-1]
+
+
+## Erase column 'Gewicht' (not relevant) -------------------------------------------------------------------------------
+ipums$Gewicht <- NULL 
 
 
 ## Creating missing values (MCAR with a 5% maximum treshold) -----------------------------------------------------------
-MCAR <- SimIm(ipumsdeel1, p = 0.05)       #https://cran.r-project.org/web/packages/imputeR/imputeR.pdf 
+MCAR <- SimIm(ipums, p = 0.05)       #https://cran.r-project.org/web/packages/imputeR/imputeR.pdf 
 View(MCAR)
   
   # Counting NA's in dataset MCAR 
@@ -77,21 +89,23 @@ View(MCAR)
   # https://datascienceplus.com/imputing-missing-data-with-r-mice-package/ 
 
   
-## Creating subset of the MCAR dataset ---------------------------------------------------------------------------------
-subset_MCAR <- MCAR[c(1:500), c(1:13)]
+## Creating subset of IPUMS en MCAR dataset ---------------------------------------------------------------------------------
+subset_IPUMS <- ipums[c(1:500), c(1:12)]
+subset_MCAR <- MCAR[c(1:500), c(1:12)]
 
-View(subset_ipums1)
 
-  
+View(subset_MCAR)
+
 
 ## Mode imputation -----------------------------------------------------------------------------------------------------
+set.seed(1)
 mode_imputation <- modeimp(MCAR)
 
   # Are all NA's replaced?
   anyNA(mode_imputation)
 
   # Computing error  
-  regr.eval(ipumsdeel1, mode_imputation)
+  MOItotal_error <- regr.eval(ipums, mode_imputation)
   
   densityplot(mode_imputation)
   
@@ -100,7 +114,7 @@ mode_imputation <- modeimp(MCAR)
   
 
 ## Multiple imputation -------------------------------------------------------------------------------------------------
-multiple_imputation <- mice(MCAR, m = 5, maxit = 50, meth = "pmm", seed = 500)
+multiple_imputation <- mice(MCAR, m = 5, maxit = 50, meth = "pmm", seed = 2)
 summary(multiple_imputation)
   
   # Get complete data (3rd out of 5)
@@ -110,7 +124,7 @@ summary(multiple_imputation)
   anyNA(multiple_imputation_output)
   
   # Computing error 
-  regr.eval(ipumsdeel1, multiple_imputation_output)
+  MItotal_error <- regr.eval(ipumsdeel1, multiple_imputation_output)
   
   
   # https://datascienceplus.com/imputing-missing-data-with-r-mice-package/
@@ -118,13 +132,14 @@ summary(multiple_imputation)
   
   
 ## (1) Random forest imputation --------------------------------------------------------------------------------------------
+set.seed(3)
 random_forest <- missForest(MCAR[ ,1:14], xtrue = ipumsdeel1[ ,1:13], verbose = TRUE)
   
   # Are all NA's replaced?
   anyNA(random_forest)
   
   # Computing error
-  regr.eval(ipumsdeel1, random_forest)
+  RFtotal_error1 <- regr.eval(ipumsdeel1, random_forest)
   
   # OOB Error
   random_forest$OOBerror
@@ -149,30 +164,27 @@ random_forest <- missForest(MCAR[ ,1:14], xtrue = ipumsdeel1[ ,1:13], verbose = 
   
   
 ## (2) Random forest imputation with MICE ------------------------------------------
+set.seed(4)
 random_forest2 <- mice.impute.rf(MCAR, ipumsdeel1, ntree = 10)
 
   # Are all NA's replaced?
   anyNA(random_forest2)
   
   # Computing error
-  regr.eval(ipumsdeel1, random_forest2)
+  RFtotal_error2 <- regr.eval(ipumsdeel1, random_forest2)
   
-
   
-## Building Naive Bayes model ------------------------------------------------------------------------------------------
+## Naive Bayes model imputation ------------------------------------------------------------------------------------------
   
   # Making dataframe 
-  NB_mcar <- data.frame(MCAR)
+  NB_mcar <- data.frame(MCAR) #Is this necessary?
   
   #names(my_mcar) <- paste("value", 1:13, sep="")
   
   # Setting total error to '0'
   NBtotal_error <- 0
   
-  # Converting to factors for prediction
-  # NB_mcar$Geslacht <- factor(NB_mcar$Geslacht)
-  # NB_mcar$Leeftijd <- factor(NB_mcar$Leeftijd)
-  
+  # Converting to factors for prediction: NB_mcar$Geslacht <- factor(NB_mcar$Geslacht) and NB_mcar$Leeftijd <- factor(NB_mcar$Leeftijd)
   convert_factor <- function(variable, data){
     data$variable <- factor(data$variable)
   }
@@ -189,12 +201,8 @@ random_forest2 <- mice.impute.rf(MCAR, ipumsdeel1, ntree = 10)
   convert_10 <- convert_factor("Beroep", NB_mcar)
   convert_11 <- convert_factor("SBI", NB_mcar)
   convert_12 <- convert_factor("Burg.staat", NB_mcar)
-  convert_13 <- convert_factor("Gewicht", NB_mcar)
   
-  # Splitting the datasets into train sets
-  #NBtrain_1 <- NB_mcar[!is.na(NB_mcar[,1]),]
-  #NBtest_1 <- NB_mcar[is.na(NB_mcar[,1]),]
-  
+  # Splitting the datasets into train sets: NBtrain_1 <- NB_mcar[!is.na(NB_mcar[,1]),] and NBtest_1 <- NB_mcar[is.na(NB_mcar[,1]),]
   NBcreate_train <- function(data, column){
     data[!is.na(data[,column]),]
   }
@@ -211,7 +219,6 @@ random_forest2 <- mice.impute.rf(MCAR, ipumsdeel1, ntree = 10)
   NBtrain_10 <- NBcreate_train(NB_mcar, 10)
   NBtrain_11 <- NBcreate_train(NB_mcar, 11)
   NBtrain_12 <- NBcreate_train(NB_mcar, 12)
-  NBtrain_13 <- NBcreate_train(NB_mcar, 13)
   
   # Splitting the datasets into test sets 
   NBcreate_test <- function(data, column){
@@ -230,9 +237,9 @@ random_forest2 <- mice.impute.rf(MCAR, ipumsdeel1, ntree = 10)
   NBtest_10 <- NBcreate_test(NB_mcar, 10)
   NBtest_11 <- NBcreate_test(NB_mcar, 11)
   NBtest_12 <- NBcreate_test(NB_mcar, 12)
-  NBtest_13 <- NBcreate_test(NB_mcar, 13)
   
-  # Building the predicting models for all 13 columns 
+  # Building the predicting models for all 12 columns 
+  set.seed(5)
   NBmodel_1 <- naiveBayes(formula = "Geslacht" ~ ., data = NBtrain_1)
   NBmodel_2 <- naiveBayes(formula = "Leeftijd" ~ ., data = NBtrain_2)
   NBmodel_3 <- naiveBayes(formula = "HH_Pos" ~ ., data = NBtrain_3)
@@ -245,10 +252,8 @@ random_forest2 <- mice.impute.rf(MCAR, ipumsdeel1, ntree = 10)
   NBmodel_10 <- naiveBayes(formula = "Beroep" ~ ., data = NBtrain_10)
   NBmodel_11 <- naiveBayes(formula = "SBI" ~ ., data = NBtrain_11)
   NBmodel_12 <- naiveBayes(formula = "Burg.Staat" ~ ., data = NBtrain_12)
-  NBmodel_13 <- naiveBayes(formula = "Gewicht" ~ ., data = NBtrain_13)
   
-  # Imputing values for all columns
-  # predictions_1 <- predict(model_1, newdata = test_1)
+  # Imputing values for all columns: predictions_1 <- predict(model_1, newdata = test_1)
   NBimpute_values <- function(model, newdata){
     predict(model, newdata = testdata)
   }
@@ -265,35 +270,31 @@ random_forest2 <- mice.impute.rf(MCAR, ipumsdeel1, ntree = 10)
   NBpredictions_10 <- NBimpute_values(NBmodel_10, NBtest_10)
   NBpredictions_11 <- NBimpute_values(NBmodel_11, NBtest_11)
   NBpredictions_12 <- NBimpute_values(NBmodel_12, NBtest_12)
-  NBpredictions_13 <- NBimpute_values(NBmodel_13, NBtest_13)
 
-  # Comparing against the true values
-  # true_1 <- ipumsdeel1[is.na(NB_mcar[,1]), 1]
+  # Comparing against the true values: true_1 <- ipumsdeel1[is.na(NB_mcar[,1]), 1]
   NBcompare_true <- funtion(data, dataNA, column){
     data[is.na(dataNA[,column]), column]
   }
   
-  NBtrue_1 <- NBcompare_true(ipumsdeel1, NB_mcar, 1)
-  NBtrue_2 <- NBcompare_true(ipumsdeel1, NB_mcar, 2)
-  NBtrue_3 <- NBcompare_true(ipumsdeel1, NB_mcar, 3)
-  NBtrue_4 <- NBcompare_true(ipumsdeel1, NB_mcar, 4)
-  NBtrue_5 <- NBcompare_true(ipumsdeel1, NB_mcar, 5)
-  NBtrue_6 <- NBcompare_true(ipumsdeel1, NB_mcar, 6)
-  NBtrue_7 <- NBcompare_true(ipumsdeel1, NB_mcar, 7)
-  NBtrue_8 <- NBcompare_true(ipumsdeel1, NB_mcar, 8)
-  NBtrue_9 <- NBcompare_true(ipumsdeel1, NB_mcar, 9)
-  NBtrue_10 <- NBcompare_true(ipumsdeel1, NB_mcar, 10)
-  NBtrue_11 <- NBcompare_true(ipumsdeel1, NB_mcar, 11)
-  NBtrue_12 <- NBcompare_true(ipumsdeel1, NB_mcar, 12)
-  NBtrue_13 <- NBcompare_true(ipumsdeel1, NB_mcar, 13)
+  NBtrue_1 <- NBcompare_true(ipums, NB_mcar, 1)
+  NBtrue_2 <- NBcompare_true(ipums, NB_mcar, 2)
+  NBtrue_3 <- NBcompare_true(ipums, NB_mcar, 3)
+  NBtrue_4 <- NBcompare_true(ipums, NB_mcar, 4)
+  NBtrue_5 <- NBcompare_true(ipums, NB_mcar, 5)
+  NBtrue_6 <- NBcompare_true(ipums, NB_mcar, 6)
+  NBtrue_7 <- NBcompare_true(ipums, NB_mcar, 7)
+  NBtrue_8 <- NBcompare_true(ipums, NB_mcar, 8)
+  NBtrue_9 <- NBcompare_true(ipums, NB_mcar, 9)
+  NBtrue_10 <- NBcompare_true(ipums, NB_mcar, 10)
+  NBtrue_11 <- NBcompare_true(ipums, NB_mcar, 11)
+  NBtrue_12 <- NBcompare_true(ipums, NB_mcar, 12)
   
   # Computing error for all columns 
   NBerror <- sum(!NBtrue_1 == NBpredictions_1, !NBtrue_2 == NBpredictions_2, !NBtrue_3 == NBpredictions_3, !NBtrue_4 == NBpredictions_4, 
                !NBtrue_5 == NBpredictions_5, !NBtrue_6 == NBpredictions_6, !NBtrue_7 == NBpredictions_7, !NBtrue_8 == NBpredictions_8, 
-               !NBtrue_9 == NBpredictions_9, !NBtrue_10 == NBpredictions_10, !NBtrue_11 == NBpredictions_11, !NBtrue_12 == NBpredictions_12, 
-               !NBtrue_13 == NBpredictions_13)
+               !NBtrue_9 == NBpredictions_9, !NBtrue_10 == NBpredictions_10, !NBtrue_11 == NBpredictions_11, !NBtrue_12 == NBpredictions_12)
   
-  # Summing error from all columns
+  # Computing total error from all columns
   NBtotal_error <- NBtotal_error + NBerror
 
   
@@ -301,6 +302,7 @@ random_forest2 <- mice.impute.rf(MCAR, ipumsdeel1, ntree = 10)
 ## kNN imputation ------------------------------------------------------------------------------------------------------
 str(MCAR)
 
+set.seed(6)
 knearestneighbor <- kNN(MCAR, k = 10)
 
 KNN1 <-knn.impute(MCAR, k = 10) install("bnstruct")
@@ -309,10 +311,10 @@ KNN1 <-knn.impute(MCAR, k = 10) install("bnstruct")
   summary(knearestneighbor)
    
   # Computing accuracy
-  regr.eval(ipumsdeel1, knearestneighbor)
+  kNNtotal_error1 <- regr.eval(ipums, knearestneighbor)
   
   # Computing accuracy
-  regr.eval(ipumsdeel1, KNN1)
+  kNNtotal_error2 <- regr.eval(ipums, KNN1)
   
   
   # https://www.youtube.com/watch?v=u8XvfhBdbMw 
@@ -323,12 +325,9 @@ KNN1 <-knn.impute(MCAR, k = 10) install("bnstruct")
 ## Support Vector Machine imputation -----------------------------------------------------------------------------------
 
   # Setting total error to '0'
-  svmtotal_error <- 0
+  SVMtotal_error <- 0
   
-  # Splitting the datasets into train sets
-  # SVMtrain_1 <- MCAR[!is.na(MCAR[,1]),]
-  # SVMtest_1 <- MCAR[is.na(MCAR[,1]),]
-  
+  # Splitting the datasets into train sets: SVMtrain_1 <- MCAR[!is.na(MCAR[,1]),] and SVMtest_1 <- MCAR[is.na(MCAR[,1]),]
   SVMcreate_train <- function(data, column){
     data[!is.na(data[,column]),]
   }
@@ -345,7 +344,6 @@ KNN1 <-knn.impute(MCAR, k = 10) install("bnstruct")
   SVMtrain_10 <- SVMcreate_train(MCAR, 10)
   SVMtrain_11 <- SVMcreate_train(MCAR, 11)
   SVMtrain_12 <- SVMcreate_train(MCAR, 12)
-  SVMtrain_13 <- SVMcreate_train(MCAR, 13)
   
   # Splitting the datasets into test sets 
   SVMcreate_test <- function(data, column){
@@ -364,25 +362,23 @@ KNN1 <-knn.impute(MCAR, k = 10) install("bnstruct")
   SVMtest_10 <- SVMcreate_test(MCAR, 10)
   SVMtest_11 <- SVMcreate_test(MCAR, 11)
   SVMtest_12 <- SVMcreate_test(MCAR, 12)
-  SVMtest_13 <- SVMcreate_test(MCAR, 13)
   
-  # Building the predicting models for all 13 columns 
-  SVMmodel_1 <- svm(formula = "Geslacht" ~ ., data = SVMtrain_1, kernel = )
-  SVMmodel_2 <- svm(formula = "Leeftijd" ~ ., data = SVMtrain_2, kernel = )
-  SVMmodel_3 <- svm(formula = "HH_Pos" ~ ., data = SVMtrain_3, kernel = )
-  SVMmodel_4 <- svm(formula = "HH_grootte" ~ ., data = SVMtrain_4, kernel = )
-  SVMmodel_5 <- svm(formula = "Woonregio vorig jaar" ~ ., data = SVMtrain_5, kernel = )
-  SVMmodel_6 <- svm(formula = "Nationaliteit" ~ ., data = SVMtrain_6, kernel = )
-  SVMmodel_7 <- svm(formula = "Geboorteland" ~ ., data = SVMtrain_7, kernel = )
-  SVMmodel_8 <- svm(formula = "Onderwijsniveau" ~ ., data = SVMtrain_8, kernel = )
-  SVMmodel_9 <- svm(formula = "Econ.status" ~ ., data = SVMtrain_9, kernel = )
-  SVMmodel_10 <- svm(formula = "Beroep" ~ ., data = SVMtrain_10, kernel = )
-  SVMmodel_11 <- svm(formula = "SBI" ~ ., data = SVMtrain_11, kernel = )
-  SVMmodel_12 <- svm(formula = "Burg.Staat" ~ ., data = SVMtrain_12, kernel = )
-  SVMmodel_13 <- svm(formula = "Gewicht" ~ ., data = SVMtrain_13, kernel = )
+  # Building the predicting models for all 12 columns 
+  set.seed(7)
+  SVMmodel_1 <- svm(formula = "Geslacht" ~ ., data = SVMtrain_1, kernel = "radial")
+  SVMmodel_2 <- svm(formula = "Leeftijd" ~ ., data = SVMtrain_2, kernel = "radial")
+  SVMmodel_3 <- svm(formula = "HH_Pos" ~ ., data = SVMtrain_3, kernel = "radial")
+  SVMmodel_4 <- svm(formula = "HH_grootte" ~ ., data = SVMtrain_4, kernel = "radial")
+  SVMmodel_5 <- svm(formula = "Woonregio vorig jaar" ~ ., data = SVMtrain_5, kernel = "radial")
+  SVMmodel_6 <- svm(formula = "Nationaliteit" ~ ., data = SVMtrain_6, kernel = "radial")
+  SVMmodel_7 <- svm(formula = "Geboorteland" ~ ., data = SVMtrain_7, kernel = "radial")
+  SVMmodel_8 <- svm(formula = "Onderwijsniveau" ~ ., data = SVMtrain_8, kernel = "radial")
+  SVMmodel_9 <- svm(formula = "Econ.status" ~ ., data = SVMtrain_9, kernel = "radial")
+  SVMmodel_10 <- svm(formula = "Beroep" ~ ., data = SVMtrain_10, kernel = "radial")
+  SVMmodel_11 <- svm(formula = "SBI" ~ ., data = SVMtrain_11, kernel = "radial")
+  SVMmodel_12 <- svm(formula = "Burg.Staat" ~ ., data = SVMtrain_12, kernel = "radial")
   
-  # Imputing values for all columns
-  # predictions_1 <- predict(model_1, newdata = test_1)
+  # Imputing values for all columns: predictions_1 <- predict(model_1, newdata = test_1)
   SVMimpute_values <- function(model, newdata){
     predict(model, newdata = testdata)
   }
@@ -399,57 +395,161 @@ KNN1 <-knn.impute(MCAR, k = 10) install("bnstruct")
   SVMpredictions_10 <- SVMimpute_values(SVMmodel_10, SVMtest_10)
   SVMpredictions_11 <- SVMimpute_values(SVMmodel_11, SVMtest_11)
   SVMpredictions_12 <- SVMimpute_values(SVMmodel_12, SVMtest_12)
-  SVMpredictions_13 <- SVMimpute_values(SVMmodel_13, SVMtest_13)
   
-  # Comparing against the true values
-  # true_1 <- ipumsdeel1[is.na(MCAR[,1]), 1]
+  # Comparing against the true values: true_1 <- ipumsdeel1[is.na(MCAR[,1]), 1]
   SVMcompare_true <- funtion(data, dataNA, column){
     data[is.na(dataNA[,column]), column]
   }
   
-  SVMtrue_1 <- SVMcompare_true(ipumsdeel1, MCAR, 1)
-  SVMtrue_2 <- SVMcompare_true(ipumsdeel1, MCAR, 2)
-  SVMtrue_3 <- SVMcompare_true(ipumsdeel1, MCAR, 3)
-  SVMtrue_4 <- SVMcompare_true(ipumsdeel1, MCAR, 4)
-  SVMtrue_5 <- SVMcompare_true(ipumsdeel1, MCAR, 5)
-  SVMtrue_6 <- SVMcompare_true(ipumsdeel1, MCAR, 6)
-  SVMtrue_7 <- SVMcompare_true(ipumsdeel1, MCAR, 7)
-  SVMtrue_8 <- SVMcompare_true(ipumsdeel1, MCAR, 8)
-  SVMtrue_9 <- SVMcompare_true(ipumsdeel1, MCAR, 9)
-  SVMtrue_10 <- SVMcompare_true(ipumsdeel1, MCAR, 10)
-  SVMtrue_11 <- SVMcompare_true(ipumsdeel1, MCAR, 11)
-  SVMtrue_12 <- SVMcompare_true(ipumsdeel1, MCAR, 12)
-  SVMtrue_13 <- SVMcompare_true(ipumsdeel1, MCAR, 13)
+  SVMtrue_1 <- SVMcompare_true(ipums, MCAR, 1)
+  SVMtrue_2 <- SVMcompare_true(ipums, MCAR, 2)
+  SVMtrue_3 <- SVMcompare_true(ipums, MCAR, 3)
+  SVMtrue_4 <- SVMcompare_true(ipums, MCAR, 4)
+  SVMtrue_5 <- SVMcompare_true(ipums, MCAR, 5)
+  SVMtrue_6 <- SVMcompare_true(ipums, MCAR, 6)
+  SVMtrue_7 <- SVMcompare_true(ipums, MCAR, 7)
+  SVMtrue_8 <- SVMcompare_true(ipums, MCAR, 8)
+  SVMtrue_9 <- SVMcompare_true(ipums, MCAR, 9)
+  SVMtrue_10 <- SVMcompare_true(ipums, MCAR, 10)
+  SVMtrue_11 <- SVMcompare_true(ipums, MCAR, 11)
+  SVMtrue_12 <- SVMcompare_true(ipums, MCAR, 12)
   
   # Computing error for all columns 
   SVMerror <- sum(!SVMtrue_1 == SVMpredictions_1, !SVMtrue_2 == SVMpredictions_2, !SVMtrue_3 == SVMpredictions_3, 
                   !SVMtrue_4 == SVMpredictions_4, !SVMtrue_5 == SVMpredictions_5, !SVMtrue_6 == SVMpredictions_6, 
                   !SVMtrue_7 == SVMpredictions_7, !SVMtrue_8 == SVMpredictions_8, !SVMtrue_9 == SVMpredictions_9, 
-                  !SVMtrue_10 == SVMpredictions_10, !SVMtrue_11 == SVMpredictions_11, !SVMtrue_12 == SVMpredictions_12, 
-                  !SVMtrue_13 == SVMpredictions_13)
+                  !SVMtrue_10 == SVMpredictions_10, !SVMtrue_11 == SVMpredictions_11, !SVMtrue_12 == SVMpredictions_12)
   
-  # Summing error from all columns
+  # Computing total error from all columns
   SVMtotal_error <- SVMtotal_error + SVMerror
   
 
   
-## Decision Tree imputation --------------------------------------------------------------------------------------------
-decision_tree <- mice.impute.cart(MCAR, minbucket = 5) #cart is niet per se decision tree, toch? Issue aanmaken voor Drew.
+## Decision Tree imputation with 'mice' (1) --------------------------------------------------------------------------------
+set.seed(8)
+decision_tree <- mice.impute.cart(MCAR, minbucket = 5)
+plot(decision_tree) #?
   
-  # OF impute_cart function, en dan uitschrijven zoals hierboven
+  # Checking if NA's are gone
+  summary(decision_tree)
+  
+  # Computing accuracy
+  DT_total_error <- regr.eval(ipums, decision_tree)
+  
             
   
   # https://rdrr.io/cran/simputation/man/impute_tree.html
   # https://www.kaggle.com/captcalculator/imputing-missing-data-with-the-mice-package-in-r/code
+  
+## Decision Tree imputation with 'rpart' (2) ------------------------------------------------------------------------------
 
+  # Setting total error to '0'
+  DT_total_error <- 0
+  
+  # Splitting the datasets into train sets: SVMtrain_1 <- MCAR[!is.na(MCAR[,1]),] and SVMtest_1 <- MCAR[is.na(MCAR[,1]),]
+  DT_create_train <- function(data, column){
+    data[!is.na(data[,column]),]
+  }
+  
+  DT_train_1 <- DT_create_train(MCAR, 1)
+  DT_train_2 <- DT_create_train(MCAR, 2)
+  DT_train_3 <- DT_create_train(MCAR, 3)
+  DT_train_4 <- DT_create_train(MCAR, 4)
+  DT_train_5 <- DT_create_train(MCAR, 5)
+  DT_train_6 <- DT_create_train(MCAR, 6)
+  DT_train_7 <- DT_create_train(MCAR, 7)
+  DT_train_8 <- DT_create_train(MCAR, 8)
+  DT_train_9 <- DT_create_train(MCAR, 9)
+  DT_train_10 <- DT_create_train(MCAR, 10)
+  DT_train_11 <- DT_create_train(MCAR, 11)
+  DT_train_12 <- DT_create_train(MCAR, 12)
+  
+  # Splitting the datasets into test sets 
+  DT_create_test <- function(data, column){
+    data[is.na(data[,column]),]
+  }
+  
+  DT_test_1 <- DT_create_test(MCAR, 1)
+  DT_test_2 <- DT_create_test(MCAR, 2)
+  DT_test_3 <- DT_create_test(MCAR, 3)
+  DT_test_4 <- DT_create_test(MCAR, 4)
+  DT_test_5 <- DT_create_test(MCAR, 5)
+  DT_test_6 <- DT_create_test(MCAR, 6)
+  DT_test_7 <- DT_create_test(MCAR, 7)
+  DT_test_8 <- DT_create_test(MCAR, 8)
+  DT_test_9 <- DT_create_test(MCAR, 9)
+  DT_test_10 <- DT_create_test(MCAR, 10)
+  DT_test_11 <- DT_create_test(MCAR, 11)
+  DT_test_12 <- DT_create_test(MCAR, 12)
+  
+  # Building the predicting models for all 12 columns 
+  DT_model_1 <- rpart(formula = "Geslacht" ~ ., data = DT_train_1, method = "class") # or "anova"?
+  DT_model_2 <- rpart(formula = "Leeftijd" ~ ., data = DT_train_2, method = "class")
+  DT_model_3 <- rpart(formula = "HH_Pos" ~ ., data = DT_train_3, method = "class")
+  DT_model_4 <- rpart(formula = "HH_grootte" ~ ., data = DT_train_4, method = "class")
+  DT_model_5 <- rpart(formula = "Woonregio vorig jaar" ~ ., data = DT_train_5, method = "class")
+  DT_model_6 <- rpart(formula = "Nationaliteit" ~ ., data = DT_train_6, method = "class")
+  DT_model_7 <- rpart(formula = "Geboorteland" ~ ., data = DT_train_7, method = "class")
+  DT_model_8 <- rpart(formula = "Onderwijsniveau" ~ ., data = DT_train_8, method = "class")
+  DT_model_9 <- rpart(formula = "Econ.status" ~ ., data = DT_train_9, method = "class")
+  DT_model_10 <- rpart(formula = "Beroep" ~ ., data = DT_train_10, method = "class")
+  DT_model_11 <- rpart(formula = "SBI" ~ ., data = DT_train_11, method = "class")
+  DT_model_12 <- rpart(formula = "Burg.Staat" ~ ., data = DT_train_12, method = "class")
+  
+  # Imputing values for all columns: predictions_1 <- predict(model_1, newdata = test_1)
+  DT_impute_values <- function(model, newdata){
+    predict(model, newdata = testdata)
+  }
+  
+  DT_predictions_1 <- DT_impute_values(DT_model_1, DT_test_1)
+  DT_predictions_2 <- DT_impute_values(DT_model_2, DT_test_2)
+  DT_predictions_3 <- DT_impute_values(DT_model_3, DT_test_3)
+  DT_predictions_4 <- DT_impute_values(DT_model_4, DT_test_4)
+  DT_predictions_5 <- DT_impute_values(DT_model_5, DT_test_5)
+  DT_predictions_6 <- DT_impute_values(DT_model_6, DT_test_6)
+  DT_predictions_7 <- DT_impute_values(DT_model_7, DT_test_7)
+  DT_predictions_8 <- DT_impute_values(DT_model_8, DT_test_8)
+  DT_predictions_9 <- DT_impute_values(DT_model_9, DT_test_9)
+  DT_predictions_10 <- DT_impute_values(DT_model_10, DT_test_10)
+  DT_predictions_11 <- DT_impute_values(DT_model_11, DT_test_11)
+  DT_predictions_12 <- DT_impute_values(DT_model_12, DT_test_12)
+  
+  # Comparing against the true values: true_1 <- ipumsdeel1[is.na(MCAR[,1]), 1]
+  DT_compare_true <- funtion(data, dataNA, column){
+    data[is.na(dataNA[,column]), column]
+  }
+  
+  DT_true_1 <- DT_compare_true(ipums, MCAR, 1)
+  DT_true_2 <- DT_compare_true(ipums, MCAR, 2)
+  DT_true_3 <- DT_compare_true(ipums, MCAR, 3)
+  DT_true_4 <- DT_compare_true(ipums, MCAR, 4)
+  DT_true_5 <- DT_compare_true(ipums, MCAR, 5)
+  DT_true_6 <- DT_compare_true(ipums, MCAR, 6)
+  DT_true_7 <- DT_compare_true(ipums, MCAR, 7)
+  DT_true_8 <- DT_compare_true(ipums, MCAR, 8)
+  DT_true_9 <- DT_compare_true(ipums, MCAR, 9)
+  DT_true_10 <- DT_compare_true(ipums, MCAR, 10)
+  DT_true_11 <- DT_compare_true(ipums, MCAR, 11)
+  DT_true_12 <- DT_compare_true(ipums, MCAR, 12)
+
+  # Computing error for all columns 
+  DT_error <- sum(!DT_true_1 == DT_predictions_1, !DT_true_2 == DT_predictions_2, !DT_true_3 == DT_predictions_3, 
+                  !DT_true_4 == DT_predictions_4, !DT_true_5 == DT_predictions_5, !DT_true_6 == DT_predictions_6, 
+                  !DT_true_7 == DT_predictions_7, !DT_true_8 == DT_predictions_8, !DT_true_9 == DT_predictions_9, 
+                  !DT_true_10 == DT_predictions_10, !DT_true_11 == DT_predictions_11, !DT_true_12 == DT_predictions_12)
+  
+  # Computing total error from all columns
+  DT_total_error <- DT_total_error + DT_error
 
   
-  
-  
-  
-## Making a dataframe with computed errors ------------------------------------------------------------------------------
-
-# Making dataframe
-
+## Making a dataframe with computed errors -------------------------------------------------------------------------------
+df_results <- data.frame(Imputation_method = c("Mode Imputation", "Multiple Imputation", "Random Forest imputation", 
+                         "naiveBayes imputation", "k-Nearest Neighbor imputation", "Support Vector Machine imputation", 
+                         "Decision Tree imputation"), 
+                         Total_error = c(MOItotal_error, MItotal_error, RFtotal_error, NBtotal_error, kNNtotal_error, 
+                                         SVMtotal_error, DT_total_error), 
+                         Rank = c(0, 0, 0, 0, 0, 0, 0))   
+                         
 # Ranking errors from best to worst 
+# sort (and put also in dataframe?)
 
