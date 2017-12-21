@@ -25,6 +25,7 @@ install.packages("missMDA")
 install_github("lebebr01/simglm", build_vignettes = TRUE) # in this section because of different install procedure
 install.packages("ggplot2")
 install.packages("rpart")
+install.packages("hot.deck")
 }
 
 
@@ -44,34 +45,35 @@ library("ForImp")
 library("missMDA")
 library("ggplot2")
 library("rpart")
+library("hot.deck")
 
 
-## Loading the databases -----------------------------------------------------------------------------------------------
+## Loading the databases -------------------------------------------------------------------------------------------------------------
 # ipumsdeel1 <- read_excel("D:/Amber/Documenten/School/Tilburg University/Master/Thesis/IPUMS2001 deel 1.xlsx")
 # ipumsdeel1 <- read_excel("IPUMS2001 deel 1.xlsx")
 # ipumsdeel2 <- read_excel()
 
 
-## Combining databases by rows -----------------------------------------------------------------------------------------
+## Combining databases by rows -------------------------------------------------------------------------------------------------------
 #ipums <- bind_rows(y,z)
 ipums <- rbind(ipumsdeel1, ipumsdeel2)
 
 slice(ipums, 90000:90001) #to check if deel 2's first row comes after deel 1's last row. 
 
 
-## Open database -------------------------------------------------------------------------------------------------------
+## Open database ---------------------------------------------------------------------------------------------------------------------
 View(ipums)
 
 
-## Erase column 'nr' ---------------------------------------------------------------------------------------------------
+## Erase column 'nr' -----------------------------------------------------------------------------------------------------------------
 ipums <- ipums[-1]
 
 
-## Erase column 'Gewicht' (not relevant) -------------------------------------------------------------------------------
+## Erase column 'Gewicht' (not relevant) ---------------------------------------------------------------------------------------------
 ipums$Gewicht <- NULL 
 
 
-## Creating missing values (MCAR with a 5% maximum treshold) -----------------------------------------------------------
+## Creating missing values (MCAR with a 5% maximum treshold) -------------------------------------------------------------------------
 MCAR <- SimIm(ipums, p = 0.05)       #https://cran.r-project.org/web/packages/imputeR/imputeR.pdf 
 View(MCAR)
   
@@ -91,14 +93,14 @@ View(MCAR)
   # https://datascienceplus.com/imputing-missing-data-with-r-mice-package/ 
 
   
-## Creating subset of IPUMS en MCAR dataset ---------------------------------------------------------------------------------
+## Creating subset of IPUMS en MCAR dataset -----------------------------------------------------------------------------------------
 subset_IPUMS <- ipums[c(1:500), c(1:12)]
 subset_MCAR <- MCAR[c(1:500), c(1:12)]
 
 View(subset_MCAR)
 
 
-## Mode imputation -----------------------------------------------------------------------------------------------------
+## Mode Imputation with '....' ------------------------------------------------------------------------------------------------------
 set.seed(1)
 mode_imputation <- modeimp(subset_MCAR)
 
@@ -112,9 +114,14 @@ mode_imputation <- modeimp(subset_MCAR)
   
   #r-statistics.co/Missing-Value-Treatment-With-R.html 
 
+
+## Hot Deck Imputation with 'VIM' ---------------------------------------------------------------------------------------------------
+hotdeck_imputation1 <- hot.deck(subset_MCAR, m = 5, method = "best.cell") #hot.deck
+hotdeck_imputation2 <- hot.deck(subset_MCAR, m = 5, method = "p.draw")
+hotdeck_imputation3 <- hotdeck(subset_MCAR) #VIM
   
 
-## Multiple imputation -------------------------------------------------------------------------------------------------
+## Multiple iImputation with 'mice' -------------------------------------------------------------------------------------------------
 multiple_imputation <- mice(subset_MCAR, m = 5, maxit = 50, meth = "pmm", seed = 2)
 summary(multiple_imputation)
   
@@ -132,7 +139,7 @@ summary(multiple_imputation)
 
   
   
-## (1) Random forest imputation --------------------------------------------------------------------------------------------
+## (1) Random Forest Imputation with 'missForest' -----------------------------------------------------------------------------------
 set.seed(3)
 random_forest <- missForest(subset_MCAR[ ,1:12], xtrue = subset_IPUMS[ ,1:12], verbose = TRUE)
   
@@ -164,7 +171,7 @@ random_forest <- missForest(subset_MCAR[ ,1:12], xtrue = subset_IPUMS[ ,1:12], v
 
   
   
-## (2) Random forest imputation with MICE ------------------------------------------
+## (2) Random forest Imputation with 'mice' ----------------------------------------------------------------------------------------
 set.seed(4)
 random_forest2 <- mice.impute.rf(subset_MCAR, subset_IPUMS, ntree = 10)
 
@@ -175,7 +182,7 @@ random_forest2 <- mice.impute.rf(subset_MCAR, subset_IPUMS, ntree = 10)
   RFtotal_error2 <- regr.eval(subset_IPUMS, random_forest2)
   
   
-## Naive Bayes model imputation ------------------------------------------------------------------------------------------
+## naiveBayes Imputation -----------------------------------------------------------------------------------------------------------
   
   # Making dataframe 
   NBmcar <- data.frame(subset_MCAR) #Is this necessary?
@@ -300,7 +307,7 @@ random_forest2 <- mice.impute.rf(subset_MCAR, subset_IPUMS, ntree = 10)
 
   
   
-## kNN imputation ------------------------------------------------------------------------------------------------------
+## k-Nearest Neighbor Imputation ------------------------------------------------------------------------------------------------------
 str(MCAR)
 
 set.seed(6)
@@ -322,8 +329,8 @@ KNN1 <-knn.impute(subset_MCAR, k = 10) install("bnstruct")
   # https://www.rdocumentation.org/packages/bnstruct/versions/1.0.2/topics/knn.impute
   
   
-  
-## Support Vector Machine imputation -----------------------------------------------------------------------------------
+
+## Support Vector Machine Imputation -------------------------------------------------------------------------------------------------
 
   # Setting total error to '0'
   SVMtotal_error <- 0
@@ -426,7 +433,7 @@ KNN1 <-knn.impute(subset_MCAR, k = 10) install("bnstruct")
   
 
   
-## Decision Tree imputation with 'mice' (1) --------------------------------------------------------------------------------
+## Decision Tree Imputation with 'mice' (1) -----------------------------------------------------------------------------------------
 set.seed(8)
 decision_tree <- mice.impute.cart(subset_MCAR, minbucket = 5)
 plot(decision_tree) #?
@@ -442,7 +449,7 @@ plot(decision_tree) #?
   # https://rdrr.io/cran/simputation/man/impute_tree.html
   # https://www.kaggle.com/captcalculator/imputing-missing-data-with-the-mice-package-in-r/code
   
-## Decision Tree imputation with 'rpart' (2) ------------------------------------------------------------------------------
+## Decision Tree Imputation with 'rpart' (2) ---------------------------------------------------------------------------------------
 
   # Setting total error to '0'
   DT_total_error <- 0
@@ -543,14 +550,16 @@ plot(decision_tree) #?
   DT_total_error <- DT_total_error + DT_error
 
   
-## Making a dataframe with computed errors -------------------------------------------------------------------------------
-df_results <- data.frame(Imputation.method = c("Mode Imputation", "Multiple Imputation", "Random Forest imputation", 
-                         "naiveBayes imputation", "k-Nearest Neighbor imputation", "Support Vector Machine imputation", 
-                         "Decision Tree imputation"), 
+## Making a dataframe with computed errors ---------------------------------------------------------------------------------------
+df_results <- data.frame(Imputation.method = c("Mode Imputation", "Hot Deck Imputation", "Multiple Imputation", 
+                                               "Random Forest Imputation", "naiveBayes Imputation", "k-Nearest Neighbor Imputation", 
+                                               "Support Vector Machine Imputation", "Decision Tree Imputation"), 
+                         
                          Total.error = c(#MOItotal_error, MItotal_error, RFtotal_error, NBtotal_error, kNNtotal_error, 
                                          #SVMtotal_error, DT_total_error
-                                         0,0,0,0,0,0,0), 
-                         Rank = c(0, 0, 0, 0, 0, 0, 0))   
+                                         0,0,0,0,0,0,0,0), 
+                         
+                         Rank = c(0, 0, 0, 0, 0, 0, 0, 0))   
 
 
 # Ranking errors from best to worst 
