@@ -26,7 +26,9 @@ install_github("lebebr01/simglm", build_vignettes = TRUE) # in this section beca
 install.packages("ggplot2")
 install.packages("rpart")
 install.packages("hot.deck")
+install.packages("HotDeckImputation")
 }
+
 
 
 ## Loading packages ----------------------------------------------------------------------------------------------------
@@ -46,12 +48,15 @@ library("missMDA")
 library("ggplot2")
 library("rpart")
 library("hot.deck")
+library("HotDeckImputation")
+
 
 
 ## Loading the databases -------------------------------------------------------------------------------------------------------------
 # ipumsdeel1 <- read_excel("D:/Amber/Documenten/School/Tilburg University/Master/Thesis/IPUMS2001 deel 1.xlsx")
 # ipumsdeel1 <- read_excel("IPUMS2001 deel 1.xlsx")
 # ipumsdeel2 <- read_excel()
+
 
 
 ## Combining databases by rows -------------------------------------------------------------------------------------------------------
@@ -61,16 +66,20 @@ ipums <- rbind(ipumsdeel1, ipumsdeel2)
 slice(ipums, 90000:90001) #to check if deel 2's first row comes after deel 1's last row. 
 
 
+
 ## Open database ---------------------------------------------------------------------------------------------------------------------
 View(ipums)
+
 
 
 ## Erase column 'nr' -----------------------------------------------------------------------------------------------------------------
 ipums <- ipums[-1]
 
 
+
 ## Erase column 'Gewicht' (not relevant) ---------------------------------------------------------------------------------------------
 ipums$Gewicht <- NULL 
+
 
 
 ## Creating missing values (MCAR with a 5% maximum treshold) -------------------------------------------------------------------------
@@ -93,11 +102,13 @@ View(MCAR)
   # https://datascienceplus.com/imputing-missing-data-with-r-mice-package/ 
 
   
+  
 ## Creating subset of IPUMS en MCAR dataset -----------------------------------------------------------------------------------------
 subset_IPUMS <- ipums[c(1:500), c(1:12)]
 subset_MCAR <- MCAR[c(1:500), c(1:12)]
 
 View(subset_MCAR)
+
 
 
 ## Mode Imputation with '....' ------------------------------------------------------------------------------------------------------
@@ -114,32 +125,63 @@ mode_imputation <- modeimp(subset_MCAR)
   
   #r-statistics.co/Missing-Value-Treatment-With-R.html 
 
-
-## Hot Deck Imputation with 'VIM' ---------------------------------------------------------------------------------------------------
-hotdeck_imputation1 <- hot.deck(subset_MCAR, m = 5, method = "best.cell") #hot.deck
-hotdeck_imputation2 <- hot.deck(subset_MCAR, m = 5, method = "p.draw")
-hotdeck_imputation3 <- hotdeck(subset_MCAR) #VIM
   
 
-## Multiple iImputation with 'mice' -------------------------------------------------------------------------------------------------
+## Hot Deck Imputation with 'hot.deck' ----------------------------------------------------------------------------------------------
+hot.deck_imputation1 <- hot.deck(subset_MCAR, m = 5, method = "best.cell") #hot.deck
+hot.deck_imputation2 <- hot.deck(subset_MCAR, m = 5, method = "p.draw")
+
+  # Are all NA's replaced?
+  anyNA(hotdeck_imputation1)
+  anyNA(hotdeck_imputation2)
+  
+  # Computing error 
+  HDtotal_error <- regr.eval(subset_IPUMS, hotdeck_imputation1)
+  HDtotal_error1 <- regr.eval(subset_IPUMS, hotdeck_imputation2)
+  
+  
+  
+## Hot Deck Imputation with 'VIM' ---------------------------------------------------------------------------------------------------
+hotdeckVIM_imputation <- hotdeck(subset_MCAR) 
+  
+  # Are all NA's replaced?
+  anyNA(hotdeckimputation)
+  
+  # Computing error
+  HDVIMtotal_error <- regr.eval(subset_IPUMS, hotdeckVIM_imputation)
+
+  
+
+## Hot Deck Imputation with 'HotDeckImputation' -------------------------------------------------------------------------------------
+hotdeckHDI_imputation <- impute.SEQ_HD(subset_MCAR, modifyinplace = TRUE)
+  
+  # Are all NA's replaced?
+  anyNA(hotdeckHDI_imputation)
+  
+  # Computing error 
+  HDHDItotal_error <- regr.eval(subset_IPUMS, hotdeckHDI_imputation)
+  
+
+  
+## Multiple Imputation with 'MICE' -------------------------------------------------------------------------------------------------
 multiple_imputation <- mice(subset_MCAR, m = 5, maxit = 50, meth = "pmm", seed = 2)
 summary(multiple_imputation)
   
   # Get complete data (3rd out of 5)
-  multiple_imputation_output <- complete(multiple_imputation, 3)
+  multiple_imputation_output <- complete(multiple_imputation, 3) # nu zie ik poging 3 
   
   # Are all NA's replaced?
   anyNA(multiple_imputation_output)
   
   # Computing error 
-  MItotal_error <- regr.eval(ipumsdeel1, multiple_imputation_output)
+  MItotal_error <- regr.eval(ipumsdeel1, multiple_imputation_output) # eerst average berekenen van de 5 datasets 
   
   
   # https://datascienceplus.com/imputing-missing-data-with-r-mice-package/
 
   
   
-## (1) Random Forest Imputation with 'missForest' -----------------------------------------------------------------------------------
+## Random Forest Imputation with 'missForest' -----------------------------------------------------------------------------------
 set.seed(3)
 random_forest <- missForest(subset_MCAR[ ,1:12], xtrue = subset_IPUMS[ ,1:12], verbose = TRUE)
   
@@ -171,7 +213,7 @@ random_forest <- missForest(subset_MCAR[ ,1:12], xtrue = subset_IPUMS[ ,1:12], v
 
   
   
-## (2) Random forest Imputation with 'mice' ----------------------------------------------------------------------------------------
+## Random forest Imputation with 'MICE' ----------------------------------------------------------------------------------------
 set.seed(4)
 random_forest2 <- mice.impute.rf(subset_MCAR, subset_IPUMS, ntree = 10)
 
@@ -180,6 +222,7 @@ random_forest2 <- mice.impute.rf(subset_MCAR, subset_IPUMS, ntree = 10)
   
   # Computing error
   RFtotal_error2 <- regr.eval(subset_IPUMS, random_forest2)
+  
   
   
 ## naiveBayes Imputation -----------------------------------------------------------------------------------------------------------
@@ -307,7 +350,7 @@ random_forest2 <- mice.impute.rf(subset_MCAR, subset_IPUMS, ntree = 10)
 
   
   
-## k-Nearest Neighbor Imputation ------------------------------------------------------------------------------------------------------
+## k-Nearest Neighbor Imputation with '....' ------------------------------------------------------------------------------------------------------
 str(MCAR)
 
 set.seed(6)
@@ -449,6 +492,8 @@ plot(decision_tree) #?
   # https://rdrr.io/cran/simputation/man/impute_tree.html
   # https://www.kaggle.com/captcalculator/imputing-missing-data-with-the-mice-package-in-r/code
   
+  
+  
 ## Decision Tree Imputation with 'rpart' (2) ---------------------------------------------------------------------------------------
 
   # Setting total error to '0'
@@ -550,16 +595,22 @@ plot(decision_tree) #?
   DT_total_error <- DT_total_error + DT_error
 
   
+  
 ## Making a dataframe with computed errors ---------------------------------------------------------------------------------------
-df_results <- data.frame(Imputation.method = c("Mode Imputation", "Hot Deck Imputation", "Multiple Imputation", 
-                                               "Random Forest Imputation", "naiveBayes Imputation", "k-Nearest Neighbor Imputation", 
-                                               "Support Vector Machine Imputation", "Decision Tree Imputation"), 
+df_results <- data.frame(Imputation.method = c("Mode Imputation", "Hot Deck Imputation with 'hot.deck'", 
+                                               "Hot Deck Imputation with 'VIM'", "Hot Deck Imputation with 'HotDeckImputation'",
+                                               "Multiple Imputation with 'MICE'", "Random Forest Imputation with 'MissForest'", 
+                                               "Random Forest Imputation with 'MICE'", "naiveBayes Imputation", 
+                                               "k-Nearest Neighbor Imputation with '....'", "k-Nearest Neighbor Imputation with '....'", 
+                                               "Support Vector Machine Imputation", "Decision Tree Imputation", 
+                                               "Decision Tree Imputation with 'MICE'"), 
                          
-                         Total.error = c(#MOItotal_error, MItotal_error, RFtotal_error, NBtotal_error, kNNtotal_error, 
-                                         #SVMtotal_error, DT_total_error
-                                         0,0,0,0,0,0,0,0), 
+                         Total.error = c(#MOItotal_error, HDtotal_error, HDVIMtotal_error, HDHDItotal_error, MItotal_error, 
+                                         #RFMFtotal_error, , RFMItotal_error, NBtotal_error, kNNtotal_error, kNNtotal_error, 
+                                         #SVMtotal_error, DT_total_error, DTMI_total_error
+                                         0,0,0,0,0,0,0,0,0,0,0,0,0), 
                          
-                         Rank = c(0, 0, 0, 0, 0, 0, 0, 0))   
+                         Rank = c(0, 0, 0, 0, 0, 0, 0, 0,0,0,0,0,0))   
 
 
 # Ranking errors from best to worst 
