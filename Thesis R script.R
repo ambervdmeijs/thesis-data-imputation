@@ -871,9 +871,14 @@ df_results <- data.frame(Imputation.method = c("Mode Imputation with 'ForImp'",
                                                "Decision Tree Imputation with 'MICE'", 
                                                "Decision Tree Imputation with 'rpart'"), 
                          
-                         Total.error = c(# MOItotal_error1, MOItotal_error2, MOItotal_error3, HDtotal_error1, HDtotal_error2, HDtotal_error3, 
-                                         # MItotal_error, RFtotal_error1, RFtotal_error2, RFtotal_error3, NBtotal_error, kNNtotal_error1, 
-                                         # kNNtotal_error2, kNNtotal_error3, kNNtotal_error4, SVMtotal_error, DT_total_error1, DT_total_error2)
+                         Total.error = c(# MOItotal_error1, MOItotal_error2, MOItotal_error3, 
+                                         # HDtotal_error1, HDtotal_error2, HDtotal_error3, 
+                                         # MItotal_error, 
+                                         # RFtotal_error1, RFtotal_error2, RFtotal_error3, 
+                                         # NBtotal_error, 
+                                         # kNNtotal_error1, kNNtotal_error2, kNNtotal_error3, kNNtotal_error4, 
+                                         # SVMtotal_error, 
+                                         # DT_total_error1, DT_total_error2)
                                          0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0), 
                          
                          Rank = c(0, 0, 0, 0, 0, 0, 0, 0,0,0,0,0,0,0,0,0,0,0))   
