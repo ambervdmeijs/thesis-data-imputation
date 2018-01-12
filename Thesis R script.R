@@ -10,7 +10,7 @@ SimIm <- function(data, p = 0.1) {
 if (F) {
 ## Install packages ----------------------------------------------------------------------------------------------------
 install.packages("readxl")
-install.packages("simglm")
+# install.packages("simglm")
 install.packages("caret")
 install.packages("devtools")
 install.packages("VIM")
@@ -28,6 +28,7 @@ install.packages("hot.deck")
 install.packages("HotDeckImputation")
 install.packages("bnstruct")
 install.packages("randomForest")
+# install.packages("slam")
 }
 
 
@@ -55,7 +56,8 @@ library("randomForest")
 
 
 ## Loading the databases -------------------------------------------------------------------------------------------------------------
-# ipumsdeel1 <- read_excel("D:/Amber/Documenten/School/Tilburg University/Master/Thesis/IPUMS2001 deel 1.xlsx")
+ipumsdeel1 <- read_excel("D:/Amber/Documenten/School/Tilburg University/Master/Thesis/IPUMS2001 deel 1.xlsx")
+ipumsdeel2 <- read_excel("D:/Amber/Documenten/School/Tilburg University/Master/Thesis/IPUMS2001 deel 2.xlsx")
 # ipumsdeel1 <- read_excel("IPUMS2001 deel 1.xlsx")
 # ipumsdeel2 <- read_excel()
 
@@ -65,10 +67,10 @@ library("randomForest")
 #ipums <- bind_rows(y,z)
 ipums <- rbind(ipumsdeel1, ipumsdeel2)
 
-tail(ipumsdeel1, 1)
-head(ipumsdeel2, 1)
+tail(ipumsdeel1, 5)
+head(ipumsdeel2, 5)
 
-slice(ipums, 90000:90001) #to check if deel 2's first row comes after deel 1's last row. 
+slice(ipums, 89996:90005) #to check if deel 2's first row comes after deel 1's last row. 
 
 
 
@@ -88,7 +90,9 @@ ipums$Gewicht <- NULL
 
 
 ## Creating missing values (MCAR with a 5% maximum treshold) -------------------------------------------------------------------------
-MCAR <- SimIm(ipums, p = 0.05)       #https://cran.r-project.org/web/packages/imputeR/imputeR.pdf 
+MCAR <- SimIm(ipums, p = 0.05)       #https://cran.r-project.org/web/packages/imputeR/imputeR.pdf  
+  # How can I keep the variable column names?
+  
 View(MCAR)
   
   # Counting NA's in dataset MCAR 
@@ -106,11 +110,17 @@ View(MCAR)
   
   # https://datascienceplus.com/imputing-missing-data-with-r-mice-package/ 
 
+
+  
+## Adding column names to MCAR ------------------------------------------------------------------------------------------------------
+# colnames(MCAR, do.NULL = FALSE, prefix = "v")
   
   
 ## Creating subset of IPUMS en MCAR dataset -----------------------------------------------------------------------------------------
 subset_IPUMS <- ipums[c(1:500), c(1:12)]
 subset_MCAR <- MCAR[c(1:500), c(1:12)]
+
+DFSUBMCAR <- data.frame(subset_MCAR)
 
 View(subset_MCAR)
 
@@ -121,12 +131,11 @@ set.seed(1)
 mode_imputation1 <- modeimp(subset_MCAR)
 
   # Are all NA's replaced?
-  anyNA(mode_imputation)
+  anyNA(mode_imputation1)
 
   # Computing error  
   MOItotal_error1 <- regr.eval(subset_IPUMS, mode_imputation1)
   
-  densityplot(mode_imputation)
   
   #r-statistics.co/Missing-Value-Treatment-With-R.html 
 
@@ -137,16 +146,16 @@ set.seed(2)
 mode_imputation2 <- mfix(subset_MCAR, mmmm = 2)  
   
   # Are all NA's replaced?
-  anyNA(mode_imputation_rough)
+  anyNA(mode_imputation2)
   
   # Computing error 
   MOItotal_error2 <- regr.eval(subset_IPUMS, mode_imputation2)
   
   
 
-## Mode Imputation with 'imputeR' ------------------------------------------------------------------------------------------------------   
+## Mode Imputation with 'imputeR' ------------------------------------------------------------------------------------------------------!!!
 set.seed(3)
-mode_imputation3 <- impute(subset_MCAR, ini = "majority")  
+mode_imputation3 <- impute(subset_MCAR)  
   
   # Are all NA's replaced?
   anyNA(mode_imputationR)
@@ -156,7 +165,7 @@ mode_imputation3 <- impute(subset_MCAR, ini = "majority")
   
   
   
-## Hot Deck Imputation with 'hot.deck' ----------------------------------------------------------------------------------------------
+## Hot Deck Imputation with 'hot.deck' ----------------------------------------------------------------------------------------------!!!
 set.seed(4)
 hotdeck_imputation1 <- hot.deck(subset_MCAR, m = 5, method = "best.cell") # why did I choose which method?
 #hot.deck_imputation2 <- hot.deck(subset_MCAR, m = 5, method = "p.draw")
@@ -171,9 +180,9 @@ hotdeck_imputation1 <- hot.deck(subset_MCAR, m = 5, method = "best.cell") # why 
   
   
   
-## Hot Deck Imputation with 'VIM' ---------------------------------------------------------------------------------------------------
+## Hot Deck Imputation with 'VIM' ---------------------------------------------------------------------------------------------------  
 set.seed(5)
-hotdeck_imputation2 <- hotdeck(subset_MCAR) 
+hotdeck_imputation2 <- hotdeck(subset_MCAR, imp_var = FALSE) 
   
   # Are all NA's replaced?
   anyNA(hotdeck_imputation2)
@@ -183,7 +192,7 @@ hotdeck_imputation2 <- hotdeck(subset_MCAR)
 
   
 
-## Hot Deck Imputation with 'HotDeckImputation' -------------------------------------------------------------------------------------
+## Hot Deck Imputation with 'HotDeckImputation' ------------------------------------------------------------------------------------- Loading problem
 set.seed(6)
 hotdeck_imputation3 <- impute.SEQ_HD(subset_MCAR, modifyinplace = TRUE)
   
@@ -195,16 +204,17 @@ hotdeck_imputation3 <- impute.SEQ_HD(subset_MCAR, modifyinplace = TRUE)
   
 
   
-## Multiple Imputation with 'MICE' -------------------------------------------------------------------------------------------------
-set.seed(7)
-multiple_imputation <- mice(subset_MCAR, m = 5, maxit = 5, meth = "pmm")
+## Multiple Imputation with 'MICE' ------------------------------------------------------------------------------------------------- SKIPS V10, V11, V12. No predictive value? + Can't get complete() to work
+set.seed(7)               
+multiple_imputation <- mice(DFSUBMCAR, predictorMatrix = (diag(1, ncol(DFSUBMCAR))), m = 5)
+multiple_imputation <- complete(multiple_imputation)
 summary(multiple_imputation)
   
-  # Get complete data (3rd out of 5)
-  multiple_imputation_output <- complete(multiple_imputation, 3) # nu zie ik poging 3 
+  # Get complete data
+  multiple_imputation_output <- complete(multiple_imputation)
   
   # Are all NA's replaced?
-  anyNA(multiple_imputation_output)
+  anyNA(multiple_imputation)
   
   # Computing error 
   MItotal_error <- regr.eval(ipumsdeel1, multiple_imputation_output) 
@@ -216,22 +226,22 @@ summary(multiple_imputation)
   
 ## Random Forest Imputation with 'missForest' -----------------------------------------------------------------------------------
 set.seed(8)
-random_forest1 <- missForest(xmis = subset_MCAR, xtrue = subset_IPUMS, ntree = 30, maxiter = 5)
+random_forest1 <- missForest(subset_MCAR, ntree = 30, maxiter = 5, replace = TRUE)
   
   # Are all NA's replaced?
-  anyNA(random_forest)
+  anyNA(random_forest1)
   
   # Computing error
-  RFtotal_error1 <- regr.eval(subset_IPUMS, random_forest1)
+  RFtotal_error1 <- regr.eval(subset_IPUMS, random_forest1$ximp)
   
   # https://www.analyticsvidhya.com/blog/2016/03/tutorial-powerful-packages-imputing-missing-values/
   # https://stat.ethz.ch/education/semesters/ss2013/ams/paper/missForest_1.2.pdf
 
   
   
-## Random Forest Imputation with 'MICE' ----------------------------------------------------------------------------------------
+## Random Forest Imputation with 'MICE' ---------------------------------------------------------------------------------------- Do not know how to define ry = 
 set.seed(9)
-random_forest2 <- mice.impute.rf(subset_MCAR, subset_IPUMS, ntree = 30)
+random_forest2 <- mice.impute.rf(x = subset_MCAR, ry = length(subset_MCAR), subset_IPUMS, ntree = 30)
 
   # Are all NA's replaced?
   anyNA(random_forest2)
@@ -252,50 +262,50 @@ set.seed(10)
     data[!is.na(data[,column]),]
   }
   
-  RFtrain_1 <- RFcreate_train(subset_MCAR, 1)
-  RFtrain_2 <- RFcreate_train(subset_MCAR, 2)
-  RFtrain_3 <- RFcreate_train(subset_MCAR, 3)
-  RFtrain_4 <- RFcreate_train(subset_MCAR, 4)
-  RFtrain_5 <- RFcreate_train(subset_MCAR, 5)
-  RFtrain_6 <- RFcreate_train(subset_MCAR, 6)
-  RFtrain_7 <- RFcreate_train(subset_MCAR, 7)
-  RFtrain_8 <- RFcreate_train(subset_MCAR, 8)
-  RFtrain_9 <- RFcreate_train(subset_MCAR, 9)
-  RFtrain_10 <- RFcreate_train(subset_MCAR, 10)
-  RFtrain_11 <- RFcreate_train(subset_MCAR, 11)
-  RFtrain_12 <- RFcreate_train(subset_MCAR, 12)
+  RFtrain_1 <- RFcreate_train(DFSUBMCAR, 1)
+  RFtrain_2 <- RFcreate_train(DFSUBMCAR, 2)
+  RFtrain_3 <- RFcreate_train(DFSUBMCAR, 3)
+  RFtrain_4 <- RFcreate_train(DFSUBMCAR, 4)
+  RFtrain_5 <- RFcreate_train(DFSUBMCAR, 5)
+  RFtrain_6 <- RFcreate_train(DFSUBMCAR, 6)
+  RFtrain_7 <- RFcreate_train(DFSUBMCAR, 7)
+  RFtrain_8 <- RFcreate_train(DFSUBMCAR, 8)
+  RFtrain_9 <- RFcreate_train(DFSUBMCAR, 9)
+  RFtrain_10 <- RFcreate_train(DFSUBMCAR, 10)
+  RFtrain_11 <- RFcreate_train(DFSUBMCAR, 11)
+  RFtrain_12 <- RFcreate_train(DFSUBMCAR, 12)
   
   # Splitting the datasets into test sets 
   RFcreate_test <- function(data, column){
     data[is.na(data[,column]),]
   }
   
-  RFtest_1 <- RFcreate_test(subset_MCAR, 1)
-  RFtest_2 <- RFcreate_test(subset_MCAR, 2)
-  RFtest_3 <- RFcreate_test(subset_MCAR, 3)
-  RFtest_4 <- RFcreate_test(subset_MCAR, 4)
-  RFtest_5 <- RFcreate_test(subset_MCAR, 5)
-  RFtest_6 <- RFcreate_test(subset_MCAR, 6)
-  RFtest_7 <- RFcreate_test(subset_MCAR, 7)
-  RFtest_8 <- RFcreate_test(subset_MCAR, 8)
-  RFtest_9 <- RFcreate_test(subset_MCAR, 9)
-  RFtest_10 <- RFcreate_test(subset_MCAR, 10)
-  RFtest_11 <- RFcreate_test(subset_MCAR, 11)
-  RFtest_12 <- RFcreate_test(subset_MCAR, 12)
+  RFtest_1 <- RFcreate_test(DFSUBMCAR, 1)
+  RFtest_2 <- RFcreate_test(DFSUBMCAR, 2)
+  RFtest_3 <- RFcreate_test(DFSUBMCAR, 3)
+  RFtest_4 <- RFcreate_test(DFSUBMCAR, 4)
+  RFtest_5 <- RFcreate_test(DFSUBMCAR, 5)
+  RFtest_6 <- RFcreate_test(DFSUBMCAR, 6)
+  RFtest_7 <- RFcreate_test(DFSUBMCAR, 7)
+  RFtest_8 <- RFcreate_test(DFSUBMCAR, 8)
+  RFtest_9 <- RFcreate_test(DFSUBMCAR, 9)
+  RFtest_10 <- RFcreate_test(DFSUBMCAR, 10)
+  RFtest_11 <- RFcreate_test(DFSUBMCAR, 11)
+  RFtest_12 <- RFcreate_test(DFSUBMCAR, 12)
   
   # Building the predicting models for all 12 columns 
-  RFmodel_1 <- randomForest(formula = "Geslacht" ~ ., data = RFtrain_1, ntree = 30)
-  RFmodel_2 <- randomForest(formula = "Leeftijd" ~ ., data = RFtrain_2, ntree = 30)
-  RFmodel_3 <- randomForest(formula = "HH_Pos" ~ ., data = RFtrain_3, ntree = 30)
-  RFmodel_4 <- randomForest(formula = "HH_grootte" ~ ., data = RFtrain_4, ntree = 30)
-  RFmodel_5 <- randomForest(formula = "Woonregio vorig jaar" ~ ., data = RFtrain_5, ntree = 30)
-  RFmodel_6 <- randomForest(formula = "Nationaliteit" ~ ., data = RFtrain_6, ntree = 30)
-  RFmodel_7 <- randomForest(formula = "Geboorteland" ~ ., data = RFtrain_7, ntree = 30)
-  RFmodel_8 <- randomForest(formula = "Onderwijsniveau" ~ ., data = RFtrain_8, ntree = 30)
-  RFmodel_9 <- randomForest(formula = "Econ.status" ~ ., data = RFtrain_9, ntree = 30)
-  RFmodel_10 <- randomForest(formula = "Beroep" ~ ., data = RFtrain_10, ntree = 30)
-  RFmodel_11 <- randomForest(formula = "SBI" ~ ., data = RFtrain_11, ntree = 30)
-  RFmodel_12 <- randomForest(formula = "Burg.Staat" ~ ., data = RFtrain_12, ntree = 30)
+  RFmodel_1 <- randomForest(formula = X1 ~ ., data = RFtrain_1, ntree = 30)   # get error... but there has to be missing values in object?
+  RFmodel_2 <- randomForest(formula = X2 ~ ., data = RFtrain_2, ntree = 30)
+  RFmodel_3 <- randomForest(formula = X3 ~ ., data = RFtrain_3, ntree = 30)
+  RFmodel_4 <- randomForest(formula = X4 ~ ., data = RFtrain_4, ntree = 30)
+  RFmodel_5 <- randomForest(formula = X5 ~ ., data = RFtrain_5, ntree = 30)
+  RFmodel_6 <- randomForest(formula = X6 ~ ., data = RFtrain_6, ntree = 30)
+  RFmodel_7 <- randomForest(formula = X7 ~ ., data = RFtrain_7, ntree = 30)
+  RFmodel_8 <- randomForest(formula = X8 ~ ., data = RFtrain_8, ntree = 30)
+  RFmodel_9 <- randomForest(formula = X9 ~ ., data = RFtrain_9, ntree = 30)
+  RFmodel_10 <- randomForest(formula = X10 ~ ., data = RFtrain_10, ntree = 30)
+  RFmodel_11 <- randomForest(formula = X11 ~ ., data = RFtrain_11, ntree = 30)
+  RFmodel_12 <- randomForest(formula = X11 ~ ., data = RFtrain_12, ntree = 30)
   
   # Imputing values for all columns: predictions_1 <- predict(model_1, newdata = test_1)
   RFimpute_values <- function(model, newdata){
@@ -320,18 +330,18 @@ set.seed(10)
     data[is.na(dataNA[,column]), column]
   }
   
-  RFtrue_1 <- RFcompare_true(subset_IPUMS, subset_MCAR, 1)
-  RFtrue_2 <- RFcompare_true(subset_IPUMS, subset_MCAR, 2)
-  RFtrue_3 <- RFcompare_true(subset_IPUMS, subset_MCAR, 3)
-  RFtrue_4 <- RFcompare_true(subset_IPUMS, subset_MCAR, 4)
-  RFtrue_5 <- RFcompare_true(subset_IPUMS, subset_MCAR, 5)
-  RFtrue_6 <- RFcompare_true(subset_IPUMS, subset_MCAR, 6)
-  RFtrue_7 <- RFcompare_true(subset_IPUMS, subset_MCAR, 7)
-  RFtrue_8 <- RFcompare_true(subset_IPUMS, subset_MCAR, 8)
-  RFtrue_9 <- RFcompare_true(subset_IPUMS, subset_MCAR, 9)
-  RFtrue_10 <- RFcompare_true(subset_IPUMS, subset_MCAR, 10)
-  RFtrue_11 <- RFcompare_true(subset_IPUMS, subset_MCAR, 11)
-  RFtrue_12 <- RFcompare_true(subset_IPUMS, subset_MCAR, 12)
+  RFtrue_1 <- RFcompare_true(subset_IPUMS, DFSUBMCAR, 1)
+  RFtrue_2 <- RFcompare_true(subset_IPUMS, DFSUBMCAR, 2)
+  RFtrue_3 <- RFcompare_true(subset_IPUMS, DFSUBMCAR, 3)
+  RFtrue_4 <- RFcompare_true(subset_IPUMS, DFSUBMCAR, 4)
+  RFtrue_5 <- RFcompare_true(subset_IPUMS, DFSUBMCAR, 5)
+  RFtrue_6 <- RFcompare_true(subset_IPUMS, DFSUBMCAR, 6)
+  RFtrue_7 <- RFcompare_true(subset_IPUMS, DFSUBMCAR, 7)
+  RFtrue_8 <- RFcompare_true(subset_IPUMS, DFSUBMCAR, 8)
+  RFtrue_9 <- RFcompare_true(subset_IPUMS, DFSUBMCAR, 9)
+  RFtrue_10 <- RFcompare_true(subset_IPUMS, DFSUBMCAR, 10)
+  RFtrue_11 <- RFcompare_true(subset_IPUMS, DFSUBMCAR, 11)
+  RFtrue_12 <- RFcompare_true(subset_IPUMS, DFSUBMCAR, 12)
   
   # Computing error for all columns 
   RFerror <- sum(!RFtrue_1 == RFpredictions_1, !RFtrue_2 == RFpredictions_2, !RFtrue_3 == RFpredictions_3, 
@@ -348,7 +358,7 @@ set.seed(10)
 set.seed(11)
   
   # Making dataframe 
-  NBmcar <- data.frame(subset_MCAR) # Why was this necessary?
+  NBmcar <- data.frame(subset_MCAR)
   
   # Setting total error to '0'
   NBtotal_error <- 0
@@ -408,18 +418,18 @@ set.seed(11)
   NBtest_12 <- NBcreate_test(NBmcar, 12)
   
   # Building the predicting models for all 12 columns 
-  NBmodel_1 <- naiveBayes(formula = "Geslacht" ~ ., data = NBtrain_1)
-  NBmodel_2 <- naiveBayes(formula = "Leeftijd" ~ ., data = NBtrain_2)
-  NBmodel_3 <- naiveBayes(formula = "HH_Pos" ~ ., data = NBtrain_3)
-  NBmodel_4 <- naiveBayes(formula = "HH_grootte" ~ ., data = NBtrain_4)
-  NBmodel_5 <- naiveBayes(formula = "Woonregio vorig jaar" ~ ., data = NBtrain_5)
-  NBmodel_6 <- naiveBayes(formula = "Nationaliteit" ~ ., data = NBtrain_6)
-  NBmodel_7 <- naiveBayes(formula = "Geboorteland" ~ ., data = NBtrain_7)
-  NBmodel_8 <- naiveBayes(formula = "Onderwijsniveau" ~ ., data = NBtrain_8)
-  NBmodel_9 <- naiveBayes(formula = "Econ.status" ~ ., data = NBtrain_9)
-  NBmodel_10 <- naiveBayes(formula = "Beroep" ~ ., data = NBtrain_10)
-  NBmodel_11 <- naiveBayes(formula = "SBI" ~ ., data = NBtrain_11)
-  NBmodel_12 <- naiveBayes(formula = "Burg.Staat" ~ ., data = NBtrain_12)
+  NBmodel_1 <- naiveBayes(formula = X1 ~ ., data = NBtrain_1)
+  NBmodel_2 <- naiveBayes(formula = X2 ~ ., data = NBtrain_2)
+  NBmodel_3 <- naiveBayes(formula = X3 ~ ., data = NBtrain_3)
+  NBmodel_4 <- naiveBayes(formula = X4 ~ ., data = NBtrain_4)
+  NBmodel_5 <- naiveBayes(formula = X5 ~ ., data = NBtrain_5)
+  NBmodel_6 <- naiveBayes(formula = X6 ~ ., data = NBtrain_6)
+  NBmodel_7 <- naiveBayes(formula = X7 ~ ., data = NBtrain_7)
+  NBmodel_8 <- naiveBayes(formula = X8 ~ ., data = NBtrain_8)
+  NBmodel_9 <- naiveBayes(formula = X9 ~ ., data = NBtrain_9)
+  NBmodel_10 <- naiveBayes(formula = X10 ~ ., data = NBtrain_10)
+  NBmodel_11 <- naiveBayes(formula = X11 ~ ., data = NBtrain_11)
+  NBmodel_12 <- naiveBayes(formula = X12 ~ ., data = NBtrain_12)
   
   # Imputing values for all columns: predictions_1 <- predict(model_1, newdata = test_1)
   NBimpute_values <- function(model, newdata){
@@ -468,9 +478,16 @@ set.seed(11)
 
   
   
-## k-Nearest Neighbor Imputation with 'DMwR' ------------------------------------------------------------------------------------------------------
+## k-Nearest Neighbor Imputation with 'DMwR' ------------------------------------------------------------------------------------------------------ # Not sufficient complete cases 
+xcomplete <- subset_MCAR[setdiff(1:nrow(subset_MCAR), which(!complete.cases(subset_MCAR))),]
+nrow(xcomplete)
+sum(complete.cases(subset_MCAR))
+
+if (nrow(xcomplete) < k) 
+    stop("Not sufficient complete cases for computing neighbors.")
+
 set.seed(12)
-kNN1 <- knnImputation(subset_IPUMS, k = 10)
+kNN1 <- knnImputation(subset_MCAR, k = 10) # Not any k-value is working  
 
   # Are all NA's replaced?
   anyNA(kNN1)
@@ -484,9 +501,9 @@ kNN1 <- knnImputation(subset_IPUMS, k = 10)
 
     
 
-## k-Nearest Neighbor Imputation with 'bnstruct' ------------------------------------------------------------------------------------------------------
+## k-Nearest Neighbor Imputation with 'VIM' ------------------------------------------------------------------------------------------------------ # argument train not found
 set.seed(13)
-kNN2 <- kNN(subset_MCAR, k = 10) 
+kNN2 <- kNN(subset_MCAR, k = 10)  
   
   # Are all NA's replaced?
   anyNA(kNN2)
@@ -496,7 +513,7 @@ kNN2 <- kNN(subset_MCAR, k = 10)
   
   
   
-## k-Nearest Neighbor Imputation with 'VIM' ------------------------------------------------------------------------------------------------------
+## k-Nearest Neighbor Imputation with 'bnstruct' ------------------------------------------------------------------------------------------------------
 set.seed(14)
 kNN3 <- knn.impute(subset_MCAR, k = 10) 
   
@@ -520,52 +537,52 @@ set.seed(15)
     data[!is.na(data[,column]),]
   }
   
-  kNNtrain_1 <- kNNcreate_train(subset_MCAR, 1)
-  kNNtrain_2 <- kNNcreate_train(subset_MCAR, 2)
-  kNNtrain_3 <- kNNcreate_train(subset_MCAR, 3)
-  kNNtrain_4 <- kNNcreate_train(subset_MCAR, 4)
-  kNNtrain_5 <- kNNcreate_train(subset_MCAR, 5)
-  kNNtrain_6 <- kNNcreate_train(subset_MCAR, 6)
-  kNNtrain_7 <- kNNcreate_train(subset_MCAR, 7)
-  kNNtrain_8 <- kNNcreate_train(subset_MCAR, 8)
-  kNNtrain_9 <- kNNcreate_train(subset_MCAR, 9)
-  kNNtrain_10 <- kNNcreate_train(subset_MCAR, 10)
-  kNNtrain_11 <- kNNcreate_train(subset_MCAR, 11)
-  kNNtrain_12 <- kNNcreate_train(subset_MCAR, 12)
+  kNNtrain_1 <- kNNcreate_train(DFSUBMCAR, 1)
+  kNNtrain_2 <- kNNcreate_train(DFSUBMCAR, 2)
+  kNNtrain_3 <- kNNcreate_train(DFSUBMCAR, 3)
+  kNNtrain_4 <- kNNcreate_train(DFSUBMCAR, 4)
+  kNNtrain_5 <- kNNcreate_train(DFSUBMCAR, 5)
+  kNNtrain_6 <- kNNcreate_train(DFSUBMCAR, 6)
+  kNNtrain_7 <- kNNcreate_train(DFSUBMCAR, 7)
+  kNNtrain_8 <- kNNcreate_train(DFSUBMCAR, 8)
+  kNNtrain_9 <- kNNcreate_train(DFSUBMCAR, 9)
+  kNNtrain_10 <- kNNcreate_train(DFSUBMCAR, 10)
+  kNNtrain_11 <- kNNcreate_train(DFSUBMCAR, 11)
+  kNNtrain_12 <- kNNcreate_train(DFSUBMCAR, 12)
   
   # Splitting the datasets into test sets 
   kNNcreate_test <- function(data, column){
     data[is.na(data[,column]),]
   }
   
-  kNNtest_1 <- kNNcreate_test(subset_MCAR, 1)
-  kNNtest_2 <- kNNcreate_test(subset_MCAR, 2)
-  kNNtest_3 <- kNNcreate_test(subset_MCAR, 3)
-  kNNtest_4 <- kNNcreate_test(subset_MCAR, 4)
-  kNNtest_5 <- kNNcreate_test(subset_MCAR, 5)
-  kNNtest_6 <- kNNcreate_test(subset_MCAR, 6)
-  kNNtest_7 <- kNNcreate_test(subset_MCAR, 7)
-  kNNtest_8 <- kNNcreate_test(subset_MCAR, 8)
-  kNNtest_9 <- kNNcreate_test(subset_MCAR, 9)
-  kNNtest_10 <- kNNcreate_test(subset_MCAR, 10)
-  kNNtest_11 <- kNNcreate_test(subset_MCAR, 11)
-  kNNtest_12 <- kNNcreate_test(subset_MCAR, 12)
+  kNNtest_1 <- kNNcreate_test(DFSUBMCAR, 1)
+  kNNtest_2 <- kNNcreate_test(DFSUBMCAR, 2)
+  kNNtest_3 <- kNNcreate_test(DFSUBMCAR, 3)
+  kNNtest_4 <- kNNcreate_test(DFSUBMCAR, 4)
+  kNNtest_5 <- kNNcreate_test(DFSUBMCAR, 5)
+  kNNtest_6 <- kNNcreate_test(DFSUBMCAR, 6)
+  kNNtest_7 <- kNNcreate_test(DFSUBMCAR, 7)
+  kNNtest_8 <- kNNcreate_test(DFSUBMCAR, 8)
+  kNNtest_9 <- kNNcreate_test(DFSUBMCAR, 9)
+  kNNtest_10 <- kNNcreate_test(DFSUBMCAR, 10)
+  kNNtest_11 <- kNNcreate_test(DFSUBMCAR, 11)
+  kNNtest_12 <- kNNcreate_test(DFSUBMCAR, 12)
   
   # Building the predicting models for all 12 columns
-  kNNmodel_1 <- knn3(formula = "Geslacht" ~ ., data = kNNtrain_1, k = 10) 
-  kNNmodel_2 <- knn3(formula = "Leeftijd" ~ ., data = kNNtrain_2, k = 10)
-  kNNmodel_3 <- knn3(formula = "HH_Pos" ~ ., data = kNNtrain_3, k = 10)
-  kNNmodel_4 <- knn3(formula = "HH_grootte" ~ ., data = kNNtrain_4, k = 10)
-  kNNmodel_5 <- knn3(formula = "Woonregio vorig jaar" ~ ., data = kNNtrain_5, k = 10)
-  kNNmodel_6 <- knn3(formula = "Nationaliteit" ~ ., data = kNNtrain_6, k = 10)
-  kNNmodel_7 <- knn3(formula = "Geboorteland" ~ ., data = kNNtrain_7, k = 10)
-  kNNmodel_8 <- knn3(formula = "Onderwijsniveau" ~ ., data = kNNtrain_8, k = 10)
-  kNNmodel_9 <- knn3(formula = "Econ.status" ~ ., data = kNNtrain_9, k = 10)
-  kNNmodel_10 <- knn3(formula = "Beroep" ~ ., data = kNNtrain_10, k = 10)
-  kNNmodel_11 <- knn3(formula = "SBI" ~ ., data = kNNtrain_11, k = 10)
-  kNNmodel_12 <- knn3(formula = "Burg.Staat" ~ ., data = kNNtrain_12, k = 10)
+  kNNmodel_1 <- knn3(formula = X1 ~ ., data = kNNtrain_1, k = 10) 
+  kNNmodel_2 <- knn3(formula = X2 ~ ., data = kNNtrain_2, k = 10)
+  kNNmodel_3 <- knn3(formula = X3 ~ ., data = kNNtrain_3, k = 10)
+  kNNmodel_4 <- knn3(formula = X4 ~ ., data = kNNtrain_4, k = 10)
+  kNNmodel_5 <- knn3(formula = X5 ~ ., data = kNNtrain_5, k = 10)
+  kNNmodel_6 <- knn3(formula = X6 ~ ., data = kNNtrain_6, k = 10)
+  kNNmodel_7 <- knn3(formula = X7 ~ ., data = kNNtrain_7, k = 10)
+  kNNmodel_8 <- knn3(formula = X8 ~ ., data = kNNtrain_8, k = 10)
+  kNNmodel_9 <- knn3(formula = X9 ~ ., data = kNNtrain_9, k = 10)
+  kNNmodel_10 <- knn3(formula = X10 ~ ., data = kNNtrain_10, k = 10)
+  kNNmodel_11 <- knn3(formula = X11 ~ ., data = kNNtrain_11, k = 10)
+  kNNmodel_12 <- knn3(formula = X12 ~ ., data = kNNtrain_12, k = 10)
   
-  # Imputing values for all columns: predictions_1 <- predict(model_1, newdata = test_1)
+  # Imputing values for all columns: predictions_1 <- predict(model_1, newdata = test_1)                                                            # object X1 not found
   kNNimpute_values <- function(model, newdata){
     predict(model, newdata = testdata)
   }
@@ -588,18 +605,18 @@ set.seed(15)
     data[is.na(dataNA[,column]), column]
   }
   
-  kNNtrue_1 <- kNNcompare_true(subset_IPUMS, subset_MCAR, 1)
-  kNNtrue_2 <- kNNcompare_true(subset_IPUMS, subset_MCAR, 2)
-  kNNtrue_3 <- kNNcompare_true(subset_IPUMS, subset_MCAR, 3)
-  kNNtrue_4 <- kNNcompare_true(subset_IPUMS, subset_MCAR, 4)
-  kNNtrue_5 <- kNNcompare_true(subset_IPUMS, subset_MCAR, 5)
-  kNNtrue_6 <- kNNcompare_true(subset_IPUMS, subset_MCAR, 6)
-  kNNtrue_7 <- kNNcompare_true(subset_IPUMS, subset_MCAR, 7)
-  kNNtrue_8 <- kNNcompare_true(subset_IPUMS, subset_MCAR, 8)
-  kNNtrue_9 <- kNNcompare_true(subset_IPUMS, subset_MCAR, 9)
-  kNNtrue_10 <- kNNcompare_true(subset_IPUMS, subset_MCAR, 10)
-  kNNtrue_11 <- kNNcompare_true(subset_IPUMS, subset_MCAR, 11)
-  kNNtrue_12 <- kNNcompare_true(subset_IPUMS, subset_MCAR, 12)
+  kNNtrue_1 <- kNNcompare_true(subset_IPUMS, DFSUBMCAR, 1)
+  kNNtrue_2 <- kNNcompare_true(subset_IPUMS, DFSUBMCAR, 2)
+  kNNtrue_3 <- kNNcompare_true(subset_IPUMS, DFSUBMCAR, 3)
+  kNNtrue_4 <- kNNcompare_true(subset_IPUMS, DFSUBMCAR, 4)
+  kNNtrue_5 <- kNNcompare_true(subset_IPUMS, DFSUBMCAR, 5)
+  kNNtrue_6 <- kNNcompare_true(subset_IPUMS, DFSUBMCAR, 6)
+  kNNtrue_7 <- kNNcompare_true(subset_IPUMS, DFSUBMCAR, 7)
+  kNNtrue_8 <- kNNcompare_true(subset_IPUMS, DFSUBMCAR, 8)
+  kNNtrue_9 <- kNNcompare_true(subset_IPUMS, DFSUBMCAR, 9)
+  kNNtrue_10 <- kNNcompare_true(subset_IPUMS, DFSUBMCAR, 10)
+  kNNtrue_11 <- kNNcompare_true(subset_IPUMS, DFSUBMCAR, 11)
+  kNNtrue_12 <- kNNcompare_true(subset_IPUMS, DFSUBMCAR, 12)
   
   # Computing error for all columns 
   kNNerror <- sum(!kNNtrue_1 == kNNpredictions_1, !kNNtrue_2 == kNNpredictions_2, !kNNtrue_3 == kNNpredictions_3, 
@@ -623,50 +640,50 @@ set.seed(16)
     data[!is.na(data[,column]),]
   }
   
-  SVMtrain_1 <- SVMcreate_train(subset_MCAR, 1)
-  SVMtrain_2 <- SVMcreate_train(subset_MCAR, 2)
-  SVMtrain_3 <- SVMcreate_train(subset_MCAR, 3)
-  SVMtrain_4 <- SVMcreate_train(subset_MCAR, 4)
-  SVMtrain_5 <- SVMcreate_train(subset_MCAR, 5)
-  SVMtrain_6 <- SVMcreate_train(subset_MCAR, 6)
-  SVMtrain_7 <- SVMcreate_train(subset_MCAR, 7)
-  SVMtrain_8 <- SVMcreate_train(subset_MCAR, 8)
-  SVMtrain_9 <- SVMcreate_train(subset_MCAR, 9)
-  SVMtrain_10 <- SVMcreate_train(subset_MCAR, 10)
-  SVMtrain_11 <- SVMcreate_train(subset_MCAR, 11)
-  SVMtrain_12 <- SVMcreate_train(subset_MCAR, 12)
+  SVMtrain_1 <- SVMcreate_train(DFSUBMCAR, 1)
+  SVMtrain_2 <- SVMcreate_train(DFSUBMCAR, 2)
+  SVMtrain_3 <- SVMcreate_train(DFSUBMCAR, 3)
+  SVMtrain_4 <- SVMcreate_train(DFSUBMCAR, 4)
+  SVMtrain_5 <- SVMcreate_train(DFSUBMCAR, 5)
+  SVMtrain_6 <- SVMcreate_train(DFSUBMCAR, 6)
+  SVMtrain_7 <- SVMcreate_train(DFSUBMCAR, 7)
+  SVMtrain_8 <- SVMcreate_train(DFSUBMCAR, 8)
+  SVMtrain_9 <- SVMcreate_train(DFSUBMCAR, 9)
+  SVMtrain_10 <- SVMcreate_train(DFSUBMCAR, 10)
+  SVMtrain_11 <- SVMcreate_train(DFSUBMCAR, 11)
+  SVMtrain_12 <- SVMcreate_train(DFSUBMCAR, 12)
   
   # Splitting the datasets into test sets 
   SVMcreate_test <- function(data, column){
     data[is.na(data[,column]),]
   }
   
-  SVMtest_1 <- SVMcreate_test(subset_MCAR, 1)
-  SVMtest_2 <- SVMcreate_test(subset_MCAR, 2)
-  SVMtest_3 <- SVMcreate_test(subset_MCAR, 3)
-  SVMtest_4 <- SVMcreate_test(subset_MCAR, 4)
-  SVMtest_5 <- SVMcreate_test(subset_MCAR, 5)
-  SVMtest_6 <- SVMcreate_test(subset_MCAR, 6)
-  SVMtest_7 <- SVMcreate_test(subset_MCAR, 7)
-  SVMtest_8 <- SVMcreate_test(subset_MCAR, 8)
-  SVMtest_9 <- SVMcreate_test(subset_MCAR, 9)
-  SVMtest_10 <- SVMcreate_test(subset_MCAR, 10)
-  SVMtest_11 <- SVMcreate_test(subset_MCAR, 11)
-  SVMtest_12 <- SVMcreate_test(subset_MCAR, 12)
+  SVMtest_1 <- SVMcreate_test(DFSUBMCAR, 1)
+  SVMtest_2 <- SVMcreate_test(DFSUBMCAR, 2)
+  SVMtest_3 <- SVMcreate_test(DFSUBMCAR, 3)
+  SVMtest_4 <- SVMcreate_test(DFSUBMCAR, 4)
+  SVMtest_5 <- SVMcreate_test(DFSUBMCAR, 5)
+  SVMtest_6 <- SVMcreate_test(DFSUBMCAR, 6)
+  SVMtest_7 <- SVMcreate_test(DFSUBMCAR, 7)
+  SVMtest_8 <- SVMcreate_test(DFSUBMCAR, 8)
+  SVMtest_9 <- SVMcreate_test(DFSUBMCAR, 9)
+  SVMtest_10 <- SVMcreate_test(DFSUBMCAR, 10)
+  SVMtest_11 <- SVMcreate_test(DFSUBMCAR, 11)
+  SVMtest_12 <- SVMcreate_test(DFSUBMCAR, 12)
   
-  # Building the predicting models for all 12 columns 
-  SVMmodel_1 <- svm(formula = "Geslacht" ~ ., data = SVMtrain_1, kernel = "radial")
-  SVMmodel_2 <- svm(formula = "Leeftijd" ~ ., data = SVMtrain_2, kernel = "radial")
-  SVMmodel_3 <- svm(formula = "HH_Pos" ~ ., data = SVMtrain_3, kernel = "radial")
-  SVMmodel_4 <- svm(formula = "HH_grootte" ~ ., data = SVMtrain_4, kernel = "radial")
-  SVMmodel_5 <- svm(formula = "Woonregio vorig jaar" ~ ., data = SVMtrain_5, kernel = "radial")
-  SVMmodel_6 <- svm(formula = "Nationaliteit" ~ ., data = SVMtrain_6, kernel = "radial")
-  SVMmodel_7 <- svm(formula = "Geboorteland" ~ ., data = SVMtrain_7, kernel = "radial")
-  SVMmodel_8 <- svm(formula = "Onderwijsniveau" ~ ., data = SVMtrain_8, kernel = "radial")
-  SVMmodel_9 <- svm(formula = "Econ.status" ~ ., data = SVMtrain_9, kernel = "radial")
-  SVMmodel_10 <- svm(formula = "Beroep" ~ ., data = SVMtrain_10, kernel = "radial")
-  SVMmodel_11 <- svm(formula = "SBI" ~ ., data = SVMtrain_11, kernel = "radial")
-  SVMmodel_12 <- svm(formula = "Burg.Staat" ~ ., data = SVMtrain_12, kernel = "radial")
+  # Building the predicting models for all 12 columns                                                                         # Cannot scale data 
+  SVMmodel_1 <- svm(formula = X1 ~ ., data = SVMtrain_1, kernel = "radial")
+  SVMmodel_2 <- svm(formula = X2 ~ ., data = SVMtrain_2, kernel = "radial")
+  SVMmodel_3 <- svm(formula = X3 ~ ., data = SVMtrain_3, kernel = "radial")
+  SVMmodel_4 <- svm(formula = X4 ~ ., data = SVMtrain_4, kernel = "radial")
+  SVMmodel_5 <- svm(formula = X5 ~ ., data = SVMtrain_5, kernel = "radial")
+  SVMmodel_6 <- svm(formula = X6 ~ ., data = SVMtrain_6, kernel = "radial")
+  SVMmodel_7 <- svm(formula = X7 ~ ., data = SVMtrain_7, kernel = "radial")
+  SVMmodel_8 <- svm(formula = X8 ~ ., data = SVMtrain_8, kernel = "radial")
+  SVMmodel_9 <- svm(formula = X9 ~ ., data = SVMtrain_9, kernel = "radial")
+  SVMmodel_10 <- svm(formula = X10 ~ ., data = SVMtrain_10, kernel = "radial")
+  SVMmodel_11 <- svm(formula = X11 ~ ., data = SVMtrain_11, kernel = "radial")
+  SVMmodel_12 <- svm(formula = X12 ~ ., data = SVMtrain_12, kernel = "radial")
   
   # Imputing values for all columns: predictions_1 <- predict(model_1, newdata = test_1)
   SVMimpute_values <- function(model, newdata){
@@ -691,18 +708,18 @@ set.seed(16)
     data[is.na(dataNA[,column]), column]
   }
   
-  SVMtrue_1 <- SVMcompare_true(subset_IPUMS, subset_MCAR, 1)
-  SVMtrue_2 <- SVMcompare_true(subset_IPUMS, subset_MCAR, 2)
-  SVMtrue_3 <- SVMcompare_true(subset_IPUMS, subset_MCAR, 3)
-  SVMtrue_4 <- SVMcompare_true(subset_IPUMS, subset_MCAR, 4)
-  SVMtrue_5 <- SVMcompare_true(subset_IPUMS, subset_MCAR, 5)
-  SVMtrue_6 <- SVMcompare_true(subset_IPUMS, subset_MCAR, 6)
-  SVMtrue_7 <- SVMcompare_true(subset_IPUMS, subset_MCAR, 7)
-  SVMtrue_8 <- SVMcompare_true(subset_IPUMS, subset_MCAR, 8)
-  SVMtrue_9 <- SVMcompare_true(subset_IPUMS, subset_MCAR, 9)
-  SVMtrue_10 <- SVMcompare_true(subset_IPUMS, subset_MCAR, 10)
-  SVMtrue_11 <- SVMcompare_true(subset_IPUMS, subset_MCAR, 11)
-  SVMtrue_12 <- SVMcompare_true(subset_IPUMS, subset_MCAR, 12)
+  SVMtrue_1 <- SVMcompare_true(subset_IPUMS, DFSUBMCAR, 1)
+  SVMtrue_2 <- SVMcompare_true(subset_IPUMS, DFSUBMCAR, 2)
+  SVMtrue_3 <- SVMcompare_true(subset_IPUMS, DFSUBMCAR, 3)
+  SVMtrue_4 <- SVMcompare_true(subset_IPUMS, DFSUBMCAR, 4)
+  SVMtrue_5 <- SVMcompare_true(subset_IPUMS, DFSUBMCAR, 5)
+  SVMtrue_6 <- SVMcompare_true(subset_IPUMS, DFSUBMCAR, 6)
+  SVMtrue_7 <- SVMcompare_true(subset_IPUMS, DFSUBMCAR, 7)
+  SVMtrue_8 <- SVMcompare_true(subset_IPUMS, DFSUBMCAR, 8)
+  SVMtrue_9 <- SVMcompare_true(subset_IPUMS, DFSUBMCAR, 9)
+  SVMtrue_10 <- SVMcompare_true(subset_IPUMS, DFSUBMCAR, 10)
+  SVMtrue_11 <- SVMcompare_true(subset_IPUMS, DFSUBMCAR, 11)
+  SVMtrue_12 <- SVMcompare_true(subset_IPUMS, DFSUBMCAR, 12)
   
   # Computing error for all columns 
   SVMerror <- sum(!SVMtrue_1 == SVMpredictions_1, !SVMtrue_2 == SVMpredictions_2, !SVMtrue_3 == SVMpredictions_3, 
@@ -715,7 +732,7 @@ set.seed(16)
   
 
   
-## Decision Tree Imputation with 'mice' -----------------------------------------------------------------------------------------
+## Decision Tree Imputation with 'mice' -----------------------------------------------------------------------------------------           # argument 'ry' is not defined
 set.seed(17)
 decision_tree1 <- mice.impute.cart(subset_MCAR, minbucket = 5)
 plot(decision_tree) #?
@@ -744,52 +761,52 @@ set.seed(18)
     data[!is.na(data[,column]),]
   }
   
-  DT_train_1 <- DT_create_train(subset_MCAR, 1)
-  DT_train_2 <- DT_create_train(subset_MCAR, 2)
-  DT_train_3 <- DT_create_train(subset_MCAR, 3)
-  DT_train_4 <- DT_create_train(subset_MCAR, 4)
-  DT_train_5 <- DT_create_train(subset_MCAR, 5)
-  DT_train_6 <- DT_create_train(subset_MCAR, 6)
-  DT_train_7 <- DT_create_train(subset_MCAR, 7)
-  DT_train_8 <- DT_create_train(subset_MCAR, 8)
-  DT_train_9 <- DT_create_train(subset_MCAR, 9)
-  DT_train_10 <- DT_create_train(subset_MCAR, 10)
-  DT_train_11 <- DT_create_train(subset_MCAR, 11)
-  DT_train_12 <- DT_create_train(subset_MCAR, 12)
+  DT_train_1 <- DT_create_train(DFSUBMCAR, 1)
+  DT_train_2 <- DT_create_train(DFSUBMCAR, 2)
+  DT_train_3 <- DT_create_train(DFSUBMCAR, 3)
+  DT_train_4 <- DT_create_train(DFSUBMCAR, 4)
+  DT_train_5 <- DT_create_train(DFSUBMCAR, 5)
+  DT_train_6 <- DT_create_train(DFSUBMCAR, 6)
+  DT_train_7 <- DT_create_train(DFSUBMCAR, 7)
+  DT_train_8 <- DT_create_train(DFSUBMCAR, 8)
+  DT_train_9 <- DT_create_train(DFSUBMCAR, 9)
+  DT_train_10 <- DT_create_train(DFSUBMCAR, 10)
+  DT_train_11 <- DT_create_train(DFSUBMCAR, 11)
+  DT_train_12 <- DT_create_train(DFSUBMCAR, 12)
   
   # Splitting the datasets into test sets 
   DT_create_test <- function(data, column){
     data[is.na(data[,column]),]
   }
   
-  DT_test_1 <- DT_create_test(subset_MCAR, 1)
-  DT_test_2 <- DT_create_test(subset_MCAR, 2)
-  DT_test_3 <- DT_create_test(subset_MCAR, 3)
-  DT_test_4 <- DT_create_test(subset_MCAR, 4)
-  DT_test_5 <- DT_create_test(subset_MCAR, 5)
-  DT_test_6 <- DT_create_test(subset_MCAR, 6)
-  DT_test_7 <- DT_create_test(subset_MCAR, 7)
-  DT_test_8 <- DT_create_test(subset_MCAR, 8)
-  DT_test_9 <- DT_create_test(subset_MCAR, 9)
-  DT_test_10 <- DT_create_test(subset_MCAR, 10)
-  DT_test_11 <- DT_create_test(subset_MCAR, 11)
-  DT_test_12 <- DT_create_test(subset_MCAR, 12)
+  DT_test_1 <- DT_create_test(DFSUBMCAR, 1)
+  DT_test_2 <- DT_create_test(DFSUBMCAR, 2)
+  DT_test_3 <- DT_create_test(DFSUBMCAR, 3)
+  DT_test_4 <- DT_create_test(DFSUBMCAR, 4)
+  DT_test_5 <- DT_create_test(DFSUBMCAR, 5)
+  DT_test_6 <- DT_create_test(DFSUBMCAR, 6)
+  DT_test_7 <- DT_create_test(DFSUBMCAR, 7)
+  DT_test_8 <- DT_create_test(DFSUBMCAR, 8)
+  DT_test_9 <- DT_create_test(DFSUBMCAR, 9)
+  DT_test_10 <- DT_create_test(DFSUBMCAR, 10)
+  DT_test_11 <- DT_create_test(DFSUBMCAR, 11)
+  DT_test_12 <- DT_create_test(DFSUBMCAR, 12)
   
   # Building the predicting models for all 12 columns 
-  DT_model_1 <- rpart(formula = "Geslacht" ~ ., data = DT_train_1, method = "class") # or "anova"?
-  DT_model_2 <- rpart(formula = "Leeftijd" ~ ., data = DT_train_2, method = "class")
-  DT_model_3 <- rpart(formula = "HH_Pos" ~ ., data = DT_train_3, method = "class")
-  DT_model_4 <- rpart(formula = "HH_grootte" ~ ., data = DT_train_4, method = "class")
-  DT_model_5 <- rpart(formula = "Woonregio vorig jaar" ~ ., data = DT_train_5, method = "class")
-  DT_model_6 <- rpart(formula = "Nationaliteit" ~ ., data = DT_train_6, method = "class")
-  DT_model_7 <- rpart(formula = "Geboorteland" ~ ., data = DT_train_7, method = "class")
-  DT_model_8 <- rpart(formula = "Onderwijsniveau" ~ ., data = DT_train_8, method = "class")
-  DT_model_9 <- rpart(formula = "Econ.status" ~ ., data = DT_train_9, method = "class")
-  DT_model_10 <- rpart(formula = "Beroep" ~ ., data = DT_train_10, method = "class")
-  DT_model_11 <- rpart(formula = "SBI" ~ ., data = DT_train_11, method = "class")
-  DT_model_12 <- rpart(formula = "Burg.Staat" ~ ., data = DT_train_12, method = "class")
+  DT_model_1 <- rpart(formula = X1 ~ ., data = DT_train_1, method = "class") # or "anova"?
+  DT_model_2 <- rpart(formula = X2 ~ ., data = DT_train_2, method = "class")
+  DT_model_3 <- rpart(formula = X3 ~ ., data = DT_train_3, method = "class")
+  DT_model_4 <- rpart(formula = X4 ~ ., data = DT_train_4, method = "class")
+  DT_model_5 <- rpart(formula = X5 ~ ., data = DT_train_5, method = "class")
+  DT_model_6 <- rpart(formula = X6 ~ ., data = DT_train_6, method = "class")
+  DT_model_7 <- rpart(formula = X7 ~ ., data = DT_train_7, method = "class")
+  DT_model_8 <- rpart(formula = X8 ~ ., data = DT_train_8, method = "class")
+  DT_model_9 <- rpart(formula = X9 ~ ., data = DT_train_9, method = "class")
+  DT_model_10 <- rpart(formula = X10 ~ ., data = DT_train_10, method = "class")                                   # Number of rows and matrices must match
+  DT_model_11 <- rpart(formula = X11 ~ ., data = DT_train_11, method = "class")
+  DT_model_12 <- rpart(formula = X12 ~ ., data = DT_train_12, method = "class")
   
-  # Imputing values for all columns: predictions_1 <- predict(model_1, newdata = test_1)
+  # Imputing values for all columns: predictions_1 <- predict(model_1, newdata = test_1)                          # error object'x1'not found
   DT_impute_values <- function(model, newdata){
     predict(model, newdata = testdata)
   }
@@ -812,18 +829,18 @@ set.seed(18)
     data[is.na(dataNA[,column]), column]
   }
   
-  DT_true_1 <- DT_compare_true(subset_IPUMS, subset_MCAR, 1)
-  DT_true_2 <- DT_compare_true(subset_IPUMS, subset_MCAR, 2)
-  DT_true_3 <- DT_compare_true(subset_IPUMS, subset_MCAR, 3)
-  DT_true_4 <- DT_compare_true(subset_IPUMS, subset_MCAR, 4)
-  DT_true_5 <- DT_compare_true(subset_IPUMS, subset_MCAR, 5)
-  DT_true_6 <- DT_compare_true(subset_IPUMS, subset_MCAR, 6)
-  DT_true_7 <- DT_compare_true(subset_IPUMS, subset_MCAR, 7)
-  DT_true_8 <- DT_compare_true(subset_IPUMS, subset_MCAR, 8)
-  DT_true_9 <- DT_compare_true(subset_IPUMS, subset_MCAR, 9)
-  DT_true_10 <- DT_compare_true(subset_IPUMS, subset_MCAR, 10)
-  DT_true_11 <- DT_compare_true(subset_IPUMS, subset_MCAR, 11)
-  DT_true_12 <- DT_compare_true(subset_IPUMS, subset_MCAR, 12)
+  DT_true_1 <- DT_compare_true(subset_IPUMS, DFSUBMCAR, 1)
+  DT_true_2 <- DT_compare_true(subset_IPUMS, DFSUBMCAR, 2)
+  DT_true_3 <- DT_compare_true(subset_IPUMS, DFSUBMCAR, 3)
+  DT_true_4 <- DT_compare_true(subset_IPUMS, DFSUBMCAR, 4)
+  DT_true_5 <- DT_compare_true(subset_IPUMS, DFSUBMCAR, 5)
+  DT_true_6 <- DT_compare_true(subset_IPUMS, DFSUBMCAR, 6)
+  DT_true_7 <- DT_compare_true(subset_IPUMS, DFSUBMCAR, 7)
+  DT_true_8 <- DT_compare_true(subset_IPUMS, DFSUBMCAR, 8)
+  DT_true_9 <- DT_compare_true(subset_IPUMS, DFSUBMCAR, 9)
+  DT_true_10 <- DT_compare_true(subset_IPUMS, DFSUBMCAR, 10)
+  DT_true_11 <- DT_compare_true(subset_IPUMS, DFSUBMCAR, 11)
+  DT_true_12 <- DT_compare_true(subset_IPUMS, DFSUBMCAR, 12)
 
   # Computing error for all columns 
   DT_error <- sum(!DT_true_1 == DT_predictions_1, !DT_true_2 == DT_predictions_2, !DT_true_3 == DT_predictions_3, 
