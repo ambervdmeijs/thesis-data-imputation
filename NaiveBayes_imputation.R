@@ -78,7 +78,7 @@ for (column in 1:ncol(NB_mcar)) {
   
   
   # Output for testing purposes ------------------------------------------------------------------------------------------------------
-  print(paste(column, nrow(NBtest), nrow(NBtrain)))
+  #print(paste(column, nrow(NBtest), nrow(NBtrain)))
   
   
   # Building the predicting models for all 12 columns --------------------------------------------------------------------------------
@@ -92,7 +92,8 @@ for (column in 1:ncol(NB_mcar)) {
   
   
   # Saving predictions into file -----------------------------------------------------------------------------------------------------
-  # save(NBpredictions, paste("NB_predictions_", column, ".csv"))
+  # write.table(NBpredictions, file = "NB_predictions_.csv", append = TRUE, col.names = TRUE, row.names = FALSE, sep = ',', eol = "\r")
+  write.table(NBpredictions, file = "NB_predictions_.csv", append = TRUE, col.names = FALSE, sep = ',')
   
   
   # Retrieving the true values that we thought were missing --------------------------------------------------------------------------
@@ -100,9 +101,10 @@ for (column in 1:ncol(NB_mcar)) {
   
 
   # Calculating the cumulative accuracy ----------------------------------------------------------------------------------------------
-  Correct <- Correct + sum(NBpredictions == NBtrue) 
+  Correct <- Correct + sum(NBpredictions %in% NBtrue) 
   Total <- Total + length(NBtrue)
 }
+
 
 # Calculating the overall accuracy ---------------------------------------------------------------------------------------------------
 Accuracy <- Correct / Total
