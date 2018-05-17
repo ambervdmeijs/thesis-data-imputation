@@ -1,11 +1,17 @@
 # Installing packages -----------------------------------------------------------------------------------------------------------------
 install.packages("readxl")
 install.packages("e1071")
+install.packages("dplyr")
+install.packages("tidyr")
+install.packages("plyr")
 
 
 # Loading packages --------------------------------------------------------------------------------------------------------------------
 library("readxl")
 library("e1071")
+library("dplyr")
+library("tidyr")
+library("plyr")
 
 
 # Function for creating probability ---------------------------------------------------------------------------------------------------
@@ -58,6 +64,23 @@ for (i in 1:ncol(NB_mcar)) {
   NB_mcar[, i] <- as.factor(NB_mcar[, i])
 }
 
+# Creating dataframe 
+NB_df <- data.frame(matrix(vector(), 0, 12, 
+                    dimnames=list(c(), c("Geslacht_pred", 
+                                         "Leeftijd_pred", 
+                                         "HH_Pos_pred", 
+                                         "HH_grootte_pred", 
+                                         "Woonregio_vorig_jaar_pred", 
+                                         "Nationaliteit_pred", 
+                                         "Geboorteland_pred", 
+                                         "Onderwijsniveau_pred", 
+                                         "Econ_status_pred",
+                                         "Beroep_pred", 
+                                         "SBI_pred",
+                                         "Burg_staat_pred"))))  
+                    
+
+
 
 # Training, testing, predicting and imputing -----------------------------------------------------------------------------------------
 
@@ -89,22 +112,63 @@ for (column in 1:ncol(NB_mcar)) {
   
   # Imputing values for all columns --------------------------------------------------------------------------------------------------
   NBpredictions <- predict(NBmodel, NBtest)
-  
+  print(NBpredictions)
   
   # Saving predictions into file -----------------------------------------------------------------------------------------------------
   # write.table(NBpredictions, file = "NB_predictions_.csv", append = TRUE, col.names = TRUE, row.names = FALSE, sep = ',', eol = "\r")
-  write.table(NBpredictions, file = "NB_predictions_.csv", append = TRUE, col.names = FALSE, sep = ',')
+  #write.table(NBpredictions, file = "NB_predictions_", column, ".csv", append = TRUE, col.names = FALSE, sep = ',')
+  #NB_pred <- read.delim(bestanden 1 tm 12)
   
+  NB_df[paste(column, sep="")] 
   
   # Retrieving the true values that we thought were missing --------------------------------------------------------------------------
-  NBtrue <- subset_IPUMS[is.na(NB_mcar[, column]), column]
-  
+  NBtrue[paste(subset_IPUMS[is.na(NB_mcar[, column]), column])]
+
+}  
 
   # Calculating the cumulative accuracy ----------------------------------------------------------------------------------------------
-  Correct <- Correct + sum(NBpredictions %in% NBtrue) 
+  Correct <- Correct + sum(NBpredictions %in% !NBtrue) 
   Total <- Total + length(NBtrue)
+
+
+  ## Trying to get the imputing to work
+df_Geslacht <- as.data.frame(as.matrix(NB_df[['1']]))
+df_Leeftijd <- as.data.frame(as.matrix(NB_df[['2']]))
+df_HH_Pos <- as.data.frame(as.matrix(NB_df[['3']]))
+df_HH_grootte <- as.data.frame(as.matrix(NB_df[['4']]))
+df_Woonregio_vorig_jaar <- as.data.frame(as.matrix(NB_df[['5']]))
+df_Nationaliteit <- as.data.frame(as.matrix(NB_df[['6']]))
+df_Geboorteland <- as.data.frame(as.matrix(NB_df[['7']]))
+df_Onderwijsniveau <- as.data.frame(as.matrix(NB_df[['8']]))
+df_Econ_status <- as.data.frame(as.matrix(NB_df[['9']]))
+df_Beroep <- as.data.frame(as.matrix(NB_df[['10']]))
+df_SBI <- as.data.frame(as.matrix(NB_df[['11']]))
+df_Burg_staat <- as.data.frame(as.matrix(NB_df[['12']]))
+
+
+n.obs <- sapply(myList, length)
+seq.max <- seq_len(max(n.obs))
+mat <- t(sapply(myList, "[", i=seq.max))
+
+View(mat)
+
+o.obs <- sapply(mat, length)
+seq.max <- seq_len(max(o.obs))
+nb <- t(sapply(mat, "[", i=seq.max))
+View(nb)
+
+
+NBdf <- as.matrix(nb)
+NBdf <- t(NBdf) #transpose 
+NBdf <- data.frame(NBdf)
+for (i in 1:ncol(NBdf)) {
+  NBdf[, i] <- as.factor(NBdf[, i])
 }
 
+# na's veranderen in 0. 
 
 # Calculating the overall accuracy ---------------------------------------------------------------------------------------------------
 Accuracy <- Correct / Total
+
+
+
